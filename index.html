@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#101612">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>MOTION — анализ движения</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "@mediapipe/tasks-vision": "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.0/vision_bundle.mjs"
+      }
+    }
+  </script>
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <main class="app">
+    <div class="camera-view is-mirrored" id="camera-view" aria-hidden="true">
+      <video id="camera" autoplay muted playsinline webkit-playsinline></video>
+      <canvas id="overlay" width="1280" height="720"></canvas>
+    </div>
+
+    <div class="interface">
+      <header class="topbar">
+        <div class="brand" aria-label="Motion, анализ движения">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M4 16.5 9 11l3.3 3 6.9-7.5M16 6.5h3.2v3.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+          <span class="brand-copy">
+            <span class="brand-name">MOTION<span class="brand-period">.</span></span>
+            <span class="brand-subtitle">АНАЛИЗ ДВИЖЕНИЯ</span>
+          </span>
+        </div>
+
+        <div class="status" id="status" data-state="idle" role="status" aria-live="polite">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="status-text">Камера выключена</span>
+        </div>
+      </header>
+
+      <div class="content">
+        <section class="empty-state" id="empty-state" data-state="idle" aria-labelledby="empty-title">
+          <div class="viewfinder" aria-hidden="true">
+            <span class="viewfinder-label"><b id="viewfinder-source">ВИД ИЗ КАМЕРЫ</b> <span>01</span></span>
+            <span class="corner corner-top-left"></span>
+            <span class="corner corner-top-right"></span>
+            <span class="corner corner-bottom-left"></span>
+            <span class="corner corner-bottom-right"></span>
+            <span class="viewfinder-center">
+              <svg viewBox="0 0 32 32" fill="none">
+                <rect x="5" y="9" width="16" height="14" rx="3" stroke="currentColor" stroke-width="1.5"/>
+                <path d="m21 13 5-2.5v11L21 19" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="viewfinder-foot">ПОДГОТОВКА К АНАЛИЗУ</span>
+          </div>
+
+          <div class="empty-copy" aria-live="polite" aria-atomic="true">
+            <p class="eyebrow">БИОМЕХАНИКА ДВИЖЕНИЯ</p>
+            <h1 id="empty-title">Движение начинается здесь</h1>
+            <p class="empty-description" id="empty-description">Включите камеру, чтобы подготовить кадр для анализа приседаний.</p>
+          </div>
+        </section>
+
+        <section class="squat-panel" id="squat-panel" aria-label="Анализ приседаний" hidden>
+          <div class="hud-scoreboard">
+            <div class="hud-counter">
+              <output id="rep-count" aria-labelledby="rep-count-label" aria-live="polite">0</output>
+              <span id="rep-count-label">ПОВТОРОВ</span>
+            </div>
+            <span class="hud-divider" aria-hidden="true"></span>
+            <div class="hud-phase-group">
+              <span class="hud-kicker">ФАЗА ДВИЖЕНИЯ</span>
+              <span class="phase-badge">
+                <span class="phase-dot" aria-hidden="true"></span>
+                <strong id="squat-phase">Подготовка</strong>
+              </span>
+            </div>
+          </div>
+
+          <div class="advice-banner" id="advice-banner" data-level="neutral">
+            <span class="advice-icon" id="advice-icon" aria-hidden="true">–</span>
+            <div class="advice-copy">
+              <span class="advice-label" id="advice-label">ПОДГОТОВКА</span>
+              <p class="advice-message" id="squat-feedback" role="status" aria-live="polite" aria-atomic="true">Встаньте прямо, чтобы начать отсчёт.</p>
+            </div>
+          </div>
+
+          <label class="squat-view">
+            <span>РАКУРС</span>
+            <select id="squat-view" aria-label="Ракурс съёмки">
+              <option value="auto">Авто</option>
+              <option value="front">Спереди</option>
+              <option value="side">Сбоку</option>
+            </select>
+          </label>
+        </section>
+      </div>
+
+      <footer class="controls" id="controls" data-source="camera" data-player="false">
+        <div class="controls-heading">
+          <div class="source-info">
+            <p class="section-label" id="source-label">ВЫБРАННАЯ КАМЕРА</p>
+            <p class="camera-name" id="camera-name">Фронтальная</p>
+          </div>
+          <div class="controls-meta">
+            <span class="step-label">
+              <span aria-hidden="true"></span>
+              <strong id="tracking-status" role="status" aria-live="polite">ПОДГОТОВКА</strong>
+            </span>
+            <button class="camera-switch" id="switch-camera" type="button">
+              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M18.5 8.5A7 7 0 0 0 6.3 7M5.5 4.5v3.2h3.2M5.5 15.5A7 7 0 0 0 17.7 17m.8 2.5v-3.2h-3.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="12" cy="12" r="2.5" stroke="currentColor" stroke-width="1.7"/>
+              </svg>
+              <span>Сменить камеру</span>
+            </button>
+          </div>
+        </div>
+        <p class="controls-hint">Установите телефон так, чтобы вы попадали в кадр целиком.</p>
+        <p class="notice" id="notice" role="alert" hidden></p>
+        <p class="notice" id="pose-notice" role="alert" hidden></p>
+
+        <div class="video-controls" id="video-controls" role="group" aria-label="Управление видео" hidden>
+          <button class="video-control video-play" id="video-play" type="button" aria-label="Воспроизвести видео">
+            <svg id="video-play-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M8 5.5v13l10-6.5L8 5.5Z" fill="currentColor"/>
+            </svg>
+            <svg id="video-pause-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true" hidden>
+              <path d="M7 5h3v14H7zM14 5h3v14h-3z" fill="currentColor"/>
+            </svg>
+            <span id="video-play-text">Пуск</span>
+          </button>
+          <div class="video-timeline">
+            <input id="video-seek" type="range" min="0" max="0" value="0" step="0.01" aria-label="Позиция видео" disabled>
+            <div class="video-times" aria-hidden="true">
+              <span id="video-current-time">0:00</span>
+              <span id="video-duration">0:00</span>
+            </div>
+          </div>
+          <button class="video-control video-loop" id="video-loop" type="button" aria-label="Зациклить видео" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M17 2.5 21 6.5l-4 4M3 11V9a2.5 2.5 0 0 1 2.5-2.5H21M7 21.5l-4-4 4-4M21 13v2a2.5 2.5 0 0 1-2.5 2.5H3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>Повтор</span>
+          </button>
+        </div>
+
+        <div class="actions">
+          <button class="button button-primary" id="toggle-camera" type="button">
+            <svg class="button-icon" id="start-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="3" y="6" width="12" height="12" rx="2.5" stroke="currentColor" stroke-width="1.8"/>
+              <path d="m15 10 5-2.5v9L15 14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <svg class="button-icon" id="stop-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true" hidden>
+              <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/>
+            </svg>
+            <span id="toggle-text">Старт камеры</span>
+          </button>
+
+          <button class="button button-secondary" id="upload-video" type="button" aria-pressed="false">
+            <svg class="button-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 15V4m0 0L8 8m4-4 4 4M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>Загрузить видео</span>
+          </button>
+          <input type="file" id="videoFileInput" accept="video/*" hidden>
+        </div>
+
+        <p class="privacy-note">
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <rect x="3.5" y="7" width="9" height="6.5" rx="1.5" stroke="currentColor" stroke-width="1.2"/>
+            <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+          </svg>
+          Видео обрабатывается на устройстве
+        </p>
+      </footer>
+    </div>
+  </main>
+</body>
+</html>
