@@ -1,5 +1,6 @@
 import { findAngle, findVerticalAngle } from './geometry.js';
-import { SquatAnalyzer, SQUAT_ERROR, SQUAT_PHASE } from './analyzer.js';
+import { SQUAT_ERROR, SQUAT_PHASE } from './analyzer.js';
+import { EXERCISES, createAnalyzer } from './exerciseFactory.js';
 
 // Версия WASM должна совпадать с версией ESM-модуля в importmap файла index.html.
 // Модель Lite меньше и быстрее остальных вариантов Pose Landmarker.
@@ -46,8 +47,10 @@ const emptyDescription = document.getElementById('empty-description');
 const notice = document.getElementById('notice');
 const trackingStatus = document.getElementById('tracking-status');
 const poseNotice = document.getElementById('pose-notice');
-const squatPanel = document.getElementById('squat-panel');
+const analysisPanel = document.getElementById('squat-panel');
 const repCount = document.getElementById('rep-count');
+const repCountLabel = document.getElementById('rep-count-label');
+const activeExercise = document.getElementById('active-exercise');
 const repCountLine = document.getElementById('rep-count-line');
 const repTarget = document.getElementById('rep-target');
 const repProgress = document.getElementById('rep-progress');
@@ -57,6 +60,11 @@ const finishButton = document.getElementById('finish-workout');
 const setupDialog = document.getElementById('workout-setup');
 const workoutForm = document.getElementById('workout-form');
 const setupSource = document.getElementById('setup-source');
+const setupDescription = document.getElementById('setup-description');
+const exerciseSelect = document.getElementById('exercise-select');
+const exerciseHint = document.getElementById('exercise-hint');
+const goalUnit = document.getElementById('goal-unit');
+const freeGoalDescription = document.getElementById('free-goal-description');
 const cancelSetup = document.getElementById('cancel-setup');
 const goalOptions = [...document.querySelectorAll('.goal-option')];
 const customGoal = document.getElementById('custom-goal');
@@ -66,24 +74,32 @@ const resultsDialog = document.getElementById('workout-results');
 const resultsTitle = document.getElementById('results-title');
 const resultsMessage = document.getElementById('results-message');
 const resultsReps = document.getElementById('results-reps');
+const resultsMetricLabel = document.getElementById('results-metric-label');
 const resultsGoal = document.getElementById('results-goal');
 const resultsDuration = document.getElementById('results-duration');
 const newWorkout = document.getElementById('new-workout');
 const closeResults = document.getElementById('close-results');
 const dismissResults = document.getElementById('dismiss-results');
-const squatPhase = document.getElementById('squat-phase');
-const squatFeedback = document.getElementById('squat-feedback');
+const phaseOutput = document.getElementById('squat-phase');
+const feedbackOutput = document.getElementById('squat-feedback');
 const adviceBanner = document.getElementById('advice-banner');
 const adviceIcon = document.getElementById('advice-icon');
 const adviceLabel = document.getElementById('advice-label');
 const squatView = document.getElementById('squat-view');
-const squatAnalyzer = new SquatAnalyzer();
-const SQUAT_PHASE_LABELS = {
-  WAITING: 'Подготовка',
-  STANDING: 'Стоя',
-  DESCENDING: 'Опускание',
-  BOTTOM: 'Нижняя точка',
-  ASCENDING: 'Подъём'
+const squatViewControl = document.getElementById('squat-view-control');
+
+// Для каждого нового выбора фабрика создаёт отдельный экземпляр анализатора.
+let currentExerciseId = 'squat';
+let currentExercise = EXERCISES[currentExerciseId];
+let currentAnalyzer = createAnalyzer(currentExerciseId);
+const PHASE_LABELS = {
+  WAITING: 'Подготовка', STANDING: 'Стоя', DESCENDING: 'Опускание',
+  BOTTOM: 'Нижняя точка', ASCENDING: 'Подъём', DOWN: 'Исходное',
+  CURLING: 'Подъём', PEAK: 'Верхняя точка', LOWERING: 'Опускание',
+  LUNGING: 'Выпад', START: 'Исходное', PRESSING: 'Жим', TOP: 'Верхняя точка',
+  LOCKOUT: 'Выпрямление', HINGING: 'Наклон', RISING: 'Подъём',
+  CLOSED: 'Исходное', OPENING: 'Раскрытие', OPEN: 'Открыто', CLOSING: 'Возврат',
+  LIFTING: 'Подъём', HANG: 'Вис', PULLING: 'Подъём', TURNAROUND: 'Разворот'
 };
 
 // Один token отменяет и запоздавшие getUserMedia, и загрузку предыдущего файла.
@@ -116,19 +132,37 @@ let poseGeneration = 0;
 let animationFrameId = null;
 let lastVideoTime = -1;
 let lastInferenceTimestamp = -1;
+// Отдельный токен инвалидирует результаты до паузы, seek, Loop или смены размера.
+let trackingEpoch = 0;
+let lastProcessedTimestamp = -1;
+let lastHoldFrameTime = null;
+const pendingFrames = new Set();
 
 function setWorkoutInterface(active) {
   finishButton.hidden = !active;
   topbar.dataset.workout = active ? 'active' : 'idle';
   controls.dataset.workout = active ? 'active' : 'idle';
+  exerciseSelect.disabled = active;
   if (!active) {
     repTarget.hidden = true;
     repProgress.hidden = true;
   }
 }
 
+function goalUnitText(value, isHold, afterIz = false) {
+  const last = value % 10;
+  const lastTwo = value % 100;
+  const one = last === 1 && lastTwo !== 11;
+  const few = last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14);
+  if (afterIz) return isHold ? (one ? 'секунды' : 'секунд') : (one ? 'повторения' : 'повторений');
+  if (isHold) return one ? 'секунда' : few ? 'секунды' : 'секунд';
+  return one ? 'повторение' : few ? 'повторения' : 'повторений';
+}
+
 function updateWorkoutHUD(count) {
-  const countText = String(count);
+  const isHold = currentExercise.mode === 'time';
+  const displayedCount = isHold ? Math.floor(Math.max(0, count)) : count;
+  const countText = String(displayedCount);
   // aria-live не должен повторно озвучивать прежнее значение на каждом кадре.
   if (repCount.textContent !== countText) repCount.textContent = countText;
   repTarget.hidden = !workout.active;
@@ -139,7 +173,7 @@ function updateWorkoutHUD(count) {
 
   const targetText = workout.goal === null ? '∞' : `/ ${workout.goal}`;
   const targetLabel = workout.goal === null
-    ? 'Свободный режим, без цели' : `Цель: ${workout.goal} повторений`;
+    ? 'Свободный режим, без цели' : `Цель: ${workout.goal} ${goalUnitText(workout.goal, isHold)}`;
   // Даже очень длинную пользовательскую цель показываем целиком, не заслоняя фазу.
   const goalLength = workout.goal === null ? 0 : String(workout.goal).length;
   const compactTarget = goalLength > 4;
@@ -158,8 +192,9 @@ function updateWorkoutHUD(count) {
 
   const progress = Math.min(count, workout.goal);
   const maximum = String(workout.goal);
-  const current = String(progress);
-  const valueText = `${progress} из ${workout.goal} повторений`;
+  const displayedProgress = Math.min(displayedCount, workout.goal);
+  const current = String(displayedProgress);
+  const valueText = `${displayedProgress} из ${workout.goal} ${goalUnitText(workout.goal, isHold, true)}`;
   const width = `${progress / workout.goal * 100}%`;
   repProgress.hidden = false;
   if (repProgress.getAttribute('aria-valuemax') !== maximum) repProgress.setAttribute('aria-valuemax', maximum);
@@ -178,6 +213,54 @@ function chooseGoal(mode, value = null) {
   if (mode !== 'custom') customGoal.value = '';
   customGoal.setAttribute('aria-invalid', 'false');
   goalError.hidden = true;
+}
+
+// Настройки и единицы всегда берём из одного каталога; значения цели не
+// переносятся между упражнениями с разными единицами измерения.
+function configureExerciseInterface() {
+  const isHold = currentExercise.mode === 'time';
+  exerciseSelect.value = currentExerciseId;
+  exerciseHint.textContent = currentExercise.hint;
+  setupDescription.textContent = isHold
+    ? 'Сколько секунд удерживать?'
+    : 'Сколько повторений выполнить?';
+  goalUnit.textContent = isHold ? 'СЕКУНДЫ' : 'ПОВТОРЕНИЯ';
+  freeGoalDescription.textContent = isHold ? 'Без ограничения времени' : 'Без ограничения повторений';
+  goalOptions.forEach((button, index) => {
+    button.dataset.goal = String(currentExercise.goals[index]);
+    button.textContent = button.dataset.goal;
+  });
+  chooseGoal('preset', currentExercise.defaultGoal);
+  repCountLabel.textContent = isHold ? 'СЕКУНД' : 'ПОВТОРОВ';
+  activeExercise.textContent = currentExercise.label.toUpperCase();
+  activeExercise.title = currentExercise.label;
+  analysisPanel.setAttribute('aria-label', `Анализ упражнения: ${currentExercise.label}`);
+  analysisPanel.dataset.exercise = currentExerciseId;
+  // Длинный текст других автоматов можно прокрутить с клавиатуры и на телефоне.
+  adviceBanner.tabIndex = currentExerciseId === 'squat' ? -1 : 0;
+  squatViewControl.hidden = currentExerciseId !== 'squat';
+  phaseOutput.textContent = PHASE_LABELS.WAITING;
+  updateWorkoutHUD(0);
+  resetAdvice();
+}
+
+function selectExercise(exerciseId) {
+  // Даже программное изменение select во время подхода не меняет автомат и счётчик.
+  if (workout.active || !Object.prototype.hasOwnProperty.call(EXERCISES, exerciseId)) {
+    exerciseSelect.value = currentExerciseId;
+    return false;
+  }
+  if (exerciseId !== currentExerciseId) {
+    currentExerciseId = exerciseId;
+    currentExercise = EXERCISES[exerciseId];
+    currentAnalyzer = createAnalyzer(exerciseId);
+    if (exerciseId === 'squat' && ['auto', 'front', 'side'].includes(squatView.value)) {
+      currentAnalyzer.setView(squatView.value);
+    }
+    invalidateFrameClock();
+  }
+  configureExerciseInterface();
+  return true;
 }
 
 function readWorkoutGoal() {
@@ -215,12 +298,12 @@ function closeDialog(dialog) {
 function openWorkoutSetup(source) {
   if (workout.active) return;
   pendingSource = source;
-  chooseGoal('preset', 10);
+  chooseGoal('preset', currentExercise.defaultGoal);
   setupSource.textContent = source.mode === 'file'
     ? `Источник: ${source.file.name}` : 'Источник: живая камера';
   setupSource.title = setupSource.textContent;
   openDialog(setupDialog);
-  goalOptions.find((button) => Number(button.dataset.goal) === 10)?.focus();
+  exerciseSelect.focus();
 }
 
 // AudioContext создаётся или разблокируется непосредственно по нажатию
@@ -266,22 +349,29 @@ function playCompletionBeep(runId) {
   else audio.resume().then(play).catch(() => {});
 }
 
-// Шаг 6 сможет расширить этот экран, используя сохранённый снимок результата.
+// Итоги содержат отдельно время подхода и фактически подтверждённое удержание.
 function showWorkoutResults(result) {
+  const isHold = result.mode === 'time';
   resultsTitle.textContent = result.reason === 'goal' ? 'Цель достигнута!' : 'Отличная работа!';
-  resultsMessage.textContent = result.reason === 'goal'
-    ? 'Вы завершили запланированный подход.' : 'Вы завершили подход самостоятельно.';
-  resultsReps.textContent = String(result.repCount);
-  resultsGoal.textContent = result.goal === null ? 'Свободный режим' : `Цель: ${result.goal}`;
+  resultsMessage.textContent = `${EXERCISES[result.exerciseId].label}: ${result.reason === 'goal'
+    ? 'запланированный подход завершён.' : 'подход завершён вручную.'}`;
+  resultsMetricLabel.textContent = isHold ? 'УДЕРЖАНИЕ, СЕК' : 'ПОВТОРЫ';
+  resultsReps.textContent = String(isHold ? Math.floor(result.activeHoldTime) : result.repCount);
+  resultsGoal.textContent = result.goal === null ? 'Свободный режим'
+    : `Цель: ${result.goal}${isHold ? ' с' : ''}`;
   resultsDuration.textContent = formatVideoTime(result.durationMs / 1000);
   openDialog(resultsDialog);
 }
 
 function finishWorkout(reason = 'manual') {
   if (!workout.active) return null; // Повторный клик и запоздавшие кадры игнорируем.
+  const isHold = currentExercise.mode === 'time';
   const result = Object.freeze({
     reason,
-    repCount: squatAnalyzer.repCount,
+    exerciseId: currentExerciseId,
+    mode: currentExercise.mode,
+    repCount: isHold ? null : currentAnalyzer.repCount,
+    activeHoldTime: isHold ? currentAnalyzer.activeHoldTime : null,
     goal: workout.goal,
     durationMs: Math.max(0, performance.now() - workout.startedAt)
   });
@@ -367,7 +457,7 @@ function setState(nextState, message = '') {
     idle: {
       status: 'Камера выключена',
       title: 'Движение начинается здесь',
-      description: 'Включите камеру, чтобы подготовить кадр для анализа приседаний.'
+      description: 'Включите камеру или выберите видео, чтобы начать анализ.'
     },
     starting: {
       status: 'Подключение',
@@ -427,7 +517,7 @@ function setTrackingState(nextState, message = '') {
   };
   trackingState = nextState;
   trackingStatus.textContent = labels[nextState];
-  squatPanel.hidden = nextState !== 'running' || !workout.active;
+  analysisPanel.hidden = nextState !== 'running' || !workout.active;
   poseNotice.textContent = message;
   poseNotice.hidden = !message;
   if (sourceMode === 'file' && fileReady) updateVideoControls();
@@ -451,16 +541,24 @@ function cancelPausedPreview() {
   }
 }
 
+// Сбрасываем только непрерывность кадров, не накопленный результат подхода.
+function invalidateFrameClock() {
+  trackingEpoch += 1;
+  lastHoldFrameTime = null;
+  pendingFrames.clear();
+}
+
 // Отменяем следующий кадр и стираем скелет, чтобы он не оставался на новом источнике.
 function stopPoseLoop() {
   cancelPoseFrame();
   cancelPausedPreview();
   lastVideoTime = -1;
+  invalidateFrameClock();
   context?.clearRect(0, 0, canvas.width, canvas.height);
-  squatAnalyzer.resetTracking();
-  squatPhase.textContent = SQUAT_PHASE_LABELS.WAITING;
+  currentAnalyzer.resetTracking();
+  phaseOutput.textContent = PHASE_LABELS.WAITING;
   resetAdvice();
-  squatPanel.hidden = true;
+  analysisPanel.hidden = true;
 }
 
 function releaseSource() {
@@ -485,9 +583,10 @@ function releaseSource() {
 }
 
 function resetAnalysisSession() {
-  squatAnalyzer.reset();
+  invalidateFrameClock();
+  currentAnalyzer.reset();
   updateWorkoutHUD(0);
-  squatPhase.textContent = SQUAT_PHASE_LABELS.WAITING;
+  phaseOutput.textContent = PHASE_LABELS.WAITING;
   resetAdvice();
 }
 
@@ -504,6 +603,10 @@ function syncCanvasSize() {
   if (videoWidth && videoHeight && (canvas.width !== videoWidth || canvas.height !== videoHeight)) {
     // Внутреннее разрешение canvas равно разрешению видео, а не размеру элемента в CSS.
     // Одинаковый object-fit: cover в style.css сохраняет совмещение при любом экране.
+    // Эталоны некоторых автоматов зависят от размеров в пикселях, в том числе
+    // при неизменном aspect ratio; прерываем попытку, но сохраняем результат.
+    currentAnalyzer.resetTracking();
+    invalidateFrameClock();
     canvas.width = videoWidth;
     canvas.height = videoHeight;
   }
@@ -706,6 +809,8 @@ function disposePoseLandmarker() {
   poseInitializationPromise = null;
   poseConnections = [];
   lastInferenceTimestamp = -1;
+  lastProcessedTimestamp = -1;
+  invalidateFrameClock();
   if (previousLandmarker) previousLandmarker.close();
 }
 
@@ -842,6 +947,15 @@ function adviceText(advice) {
 }
 
 function chooseAdvice(result) {
+  if (currentExerciseId !== 'squat') {
+    // Показываем фактическую рекомендацию анализатора, включая ограничения.
+    // Для повторений отсутствие предупреждений не равно оценке безопасности.
+    const text = result.feedbackMessage || currentExercise.initialAdvice;
+    const hasError = Array.isArray(result.currentErrors) && result.currentErrors.length > 0;
+    const level = hasError || (currentExercise.mode === 'time' && !result.isFormCorrect)
+      ? 'warning' : currentExercise.mode === 'time' && result.isFormCorrect ? 'good' : 'neutral';
+    return { key: `${currentExerciseId}:${level}:${text}`, level, text };
+  }
   const errors = result.currentErrors;
   if (errors.includes(SQUAT_ERROR.BACK_LEAN)) return ADVICE.back;
   if (errors.includes(SQUAT_ERROR.SHALLOW)) return ADVICE.shallow;
@@ -872,7 +986,7 @@ function renderAdvice(advice, now) {
   adviceBanner.dataset.level = advice.level;
   adviceIcon.textContent = style.icon;
   adviceLabel.textContent = style.label;
-  squatFeedback.textContent = adviceText(advice);
+  feedbackOutput.textContent = adviceText(advice);
 }
 
 function updateAdvice(result, now = performance.now()) {
@@ -895,19 +1009,55 @@ function resetAdvice() {
   adviceBanner.dataset.level = ADVICE.waiting.level;
   adviceIcon.textContent = ADVICE_STYLES.neutral.icon;
   adviceLabel.textContent = ADVICE_STYLES.neutral.label;
-  squatFeedback.textContent = adviceText(ADVICE.waiting);
+  feedbackOutput.textContent = currentExerciseId === 'squat'
+    ? adviceText(ADVICE.waiting) : currentExercise.initialAdvice;
 }
 
-// Обновляем счётчик и фазу на каждом кадре, а рекомендацию — с выдержкой.
-function updateSquatAnalysis(landmarks) {
+// Файловой планке передаём интервалы медиавремени, живой — performance.now().
+// В паузе/на seek обрабатывается только предпросмотр с нулевым интервалом.
+function holdDeltaSeconds(frame) {
+  if (!frame || frame.pausedPreview) {
+    lastHoldFrameTime = null;
+    return 0;
+  }
+  const now = frame.sourceMode === 'file' ? frame.videoTime : frame.wallTimeMs / 1000;
+  if (!Number.isFinite(now)) {
+    lastHoldFrameTime = null;
+    return 0;
+  }
+  const delta = lastHoldFrameTime === null ? 0 : now - lastHoldFrameTime;
+  if (!Number.isFinite(delta) || delta < 0) {
+    // Даже небольшой скачок назад не должен повторно начислить тот же участок.
+    lastHoldFrameTime = null;
+    currentAnalyzer.resetTracking();
+    return 0;
+  }
+  lastHoldFrameTime = now;
+  return delta;
+}
+
+// Передаём каждому автомату именно тот вариант времени, который он ожидает.
+function updateExerciseAnalysis(landmarks, frame) {
   if (!workout.active) return null;
-  squatAnalyzer.setFrameSize(canvas.width, canvas.height);
-  const result = squatAnalyzer.update(landmarks);
-  const phase = SQUAT_PHASE_LABELS[result.currentPhase];
-  updateWorkoutHUD(result.repCount);
-  if (squatPhase.textContent !== phase) squatPhase.textContent = phase;
+  currentAnalyzer.setFrameSize(canvas.width, canvas.height);
+  let result;
+  if (currentExercise.input === 'delta') {
+    result = currentAnalyzer.update(landmarks, holdDeltaSeconds(frame));
+    // Предпросмотр на паузе не подтверждает начало последующего удержания.
+    if (frame?.pausedPreview) currentAnalyzer.resetTracking();
+  } else if (currentExercise.input === 'timestamp') {
+    result = currentAnalyzer.update(landmarks, frame?.timestampMs ?? performance.now());
+  } else {
+    result = currentAnalyzer.update(landmarks);
+  }
+  const isHold = currentExercise.mode === 'time';
+  const metric = isHold ? result.activeHoldTime : result.repCount;
+  const phase = isHold ? (result.isFormCorrect && !frame?.pausedPreview ? 'Удержание' : 'Пауза')
+    : PHASE_LABELS[result.currentPhase] ?? PHASE_LABELS.WAITING;
+  updateWorkoutHUD(metric);
+  if (phaseOutput.textContent !== phase) phaseOutput.textContent = phase;
   updateAdvice(result);
-  if (workout.goal !== null && result.repCount >= workout.goal) finishWorkout('goal');
+  if (workout.goal !== null && metric >= workout.goal) finishWorkout('goal');
   return result;
 }
 
@@ -936,7 +1086,7 @@ function drawHighlightedSegments(landmarks, segments, width, height, lineWidth) 
 }
 
 // Колбэк MediaPipe вызывается синхронно; результат используется без копирования масок.
-function drawPose(result) {
+function drawPose(result, frame = null) {
   if (!workout.active) return;
   const width = canvas.width;
   const height = canvas.height;
@@ -944,7 +1094,7 @@ function drawPose(result) {
 
   const landmarks = result.landmarks?.[0];
   // Передаём и отсутствие позы, чтобы автомат не засчитал повтор через потерянные кадры.
-  updateSquatAnalysis(landmarks ?? null);
+  updateExerciseAnalysis(landmarks ?? null, frame);
   if (!workout.active || !landmarks) return;
 
   // X и Y нормированы по размеру кадра и могут выходить за его границы.
@@ -971,7 +1121,9 @@ function drawPose(result) {
   context.stroke();
 
   // Сегменты относятся к текущему кадру; текст ошибки удерживается отдельно.
-  drawHighlightedSegments(landmarks, squatAnalyzer.getHighlightedSegments(), width, height, lineWidth);
+  if (typeof currentAnalyzer.getHighlightedSegments === 'function') {
+    drawHighlightedSegments(landmarks, currentAnalyzer.getHighlightedSegments(), width, height, lineWidth);
+  }
 
   // Суставы рисуются поверх линий; тёмная обводка видна и на светлом видео.
   context.beginPath();
@@ -988,8 +1140,8 @@ function drawPose(result) {
   context.lineWidth = Math.max(1, lineWidth * 0.45);
   context.stroke();
 
-  // Подписи строятся после скелета, поверх соответствующих суставов.
-  drawAngleValues(landmarks, width, height);
+  // Имеющиеся подписи коленей, таза и корпуса относятся только к приседаниям.
+  if (currentExerciseId === 'squat') drawAngleValues(landmarks, width, height);
 }
 
 // Источник может быть камерой или локальным видео. Пока модель жива, её
@@ -999,8 +1151,9 @@ function hasActiveSource() {
 }
 
 function resetPartialTracking() {
-  squatAnalyzer.resetTracking();
-  squatPhase.textContent = SQUAT_PHASE_LABELS.WAITING;
+  currentAnalyzer.resetTracking();
+  invalidateFrameClock();
+  phaseOutput.textContent = PHASE_LABELS.WAITING;
   lastVideoTime = -1;
   context?.clearRect(0, 0, canvas.width, canvas.height);
   resetAdvice();
@@ -1018,17 +1171,41 @@ function processPoseFrame(force = false) {
   syncCanvasSize();
   lastVideoTime = video.currentTime;
   // Не используем currentTime: он уменьшается при перемотке и зацикливании.
-  const timestamp = Math.max(performance.now(), lastInferenceTimestamp + 1);
+  const wallTimeMs = performance.now();
+  const timestamp = Math.max(wallTimeMs, lastInferenceTimestamp + 1);
   lastInferenceTimestamp = timestamp;
 
   const frameRequest = requestId;
   const frameWorkout = workout.runId;
+  const frameEpoch = trackingEpoch;
+  const frame = {
+    timestampMs: timestamp,
+    wallTimeMs,
+    sourceMode,
+    videoTime: video.currentTime,
+    pausedPreview: sourceMode === 'file' && (video.paused || video.ended)
+  };
+  const ticket = { timestamp };
+  pendingFrames.add(ticket);
   try {
     poseLandmarker.detectForVideo(video, timestamp, (result) => {
-      // Даже если реализация вернёт кадр с задержкой, он не попадёт в другой подход или источник.
-      if (workout.active && requestId === frameRequest && workout.runId === frameWorkout) drawPose(result);
+      // Если новый результат опередил ещё не полученный старый, промежуток
+      // не подтверждён: сначала прерываем попытку или удержание.
+      const skippedOlderFrame = [...pendingFrames].some((other) => other.timestamp < timestamp);
+      pendingFrames.delete(ticket);
+      // Запоздавшие и пришедшие не по порядку результаты нельзя использовать
+      // после паузы, перемотки, нового подхода, источника или другого кадра.
+      if (!workout.active || requestId !== frameRequest || workout.runId !== frameWorkout ||
+          trackingEpoch !== frameEpoch || timestamp <= lastProcessedTimestamp) return;
+      if (skippedOlderFrame) {
+        currentAnalyzer.resetTracking();
+        lastHoldFrameTime = null;
+      }
+      lastProcessedTimestamp = timestamp;
+      drawPose(result, frame);
     });
   } catch (error) {
+    pendingFrames.delete(ticket);
     // Достижение цели могло остановить источник прямо внутри синхронного колбэка.
     if (!workout.active || requestId !== frameRequest || workout.runId !== frameWorkout) return;
     console.error('Ошибка обработки позы:', error);
@@ -1322,6 +1499,8 @@ videoLoop.addEventListener('click', () => {
 video.addEventListener('play', () => {
   if (!isActiveFile()) return;
   cancelPausedPreview();
+  invalidateFrameClock();
+  if (currentExercise.mode === 'time') currentAnalyzer.resetTracking();
   updateVideoControls();
   statusText.textContent = 'Видео готово';
   setNotice();
@@ -1331,6 +1510,11 @@ video.addEventListener('pause', () => {
   if (!isActiveFile()) return;
   cancelPoseFrame();
   cancelPausedPreview();
+  invalidateFrameClock();
+  if (currentExercise.mode === 'time') {
+    currentAnalyzer.resetTracking();
+    phaseOutput.textContent = 'Пауза';
+  }
   updateVideoControls();
 });
 video.addEventListener('seeking', () => {
@@ -1351,6 +1535,11 @@ video.addEventListener('ended', () => {
   if (!isActiveFile()) return;
   cancelPoseFrame();
   cancelPausedPreview();
+  invalidateFrameClock();
+  if (currentExercise.mode === 'time') {
+    currentAnalyzer.resetTracking();
+    phaseOutput.textContent = 'Пауза';
+  }
   updateVideoControls();
 });
 video.addEventListener('timeupdate', () => {
@@ -1367,7 +1556,10 @@ video.addEventListener('error', () => {
 });
 
 switchButton.addEventListener('click', switchCamera);
-squatView.addEventListener('change', () => squatAnalyzer.setView(squatView.value));
+exerciseSelect.addEventListener('change', () => selectExercise(exerciseSelect.value));
+squatView.addEventListener('change', () => {
+  if (currentExerciseId === 'squat') currentAnalyzer.setView(squatView.value);
+});
 video.addEventListener('loadedmetadata', syncCanvasSize);
 video.addEventListener('resize', syncCanvasSize);
 window.addEventListener('resize', syncCanvasSize);
@@ -1384,3 +1576,6 @@ window.addEventListener('pagehide', () => {
   if (audioContext && audioContext.state !== 'closed') audioContext.close().catch(() => {});
   audioContext = null;
 });
+
+// Синхронизируем начальное состояние с упражнением по умолчанию.
+configureExerciseInterface();

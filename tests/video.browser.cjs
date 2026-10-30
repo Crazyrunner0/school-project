@@ -28,6 +28,9 @@ async function run() {
     ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
     ['/geometry.js', ['geometry.js', 'text/javascript; charset=utf-8']],
     ['/analyzer.js', ['analyzer.js', 'text/javascript; charset=utf-8']],
+    ...['exerciseFactory.js', 'plankAnalyzer.js', 'sidePlankAnalyzer.js', 'bicepCurlAnalyzer.js',
+      'lungeAnalyzer.js', 'overheadPressAnalyzer.js', 'deadliftAnalyzer.js', 'jumpingJacksAnalyzer.js',
+      'gluteBridgeAnalyzer.js', 'pullupAnalyzer.js'].map((file) => [`/${file}`, [file, 'text/javascript; charset=utf-8']]),
     ['/style.css', ['style.css', 'text/css; charset=utf-8']]
   ]);
   const server = http.createServer(async (request, response) => {

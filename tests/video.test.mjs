@@ -1,13 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { browserModuleUrls } from './helpers/moduleLoader.mjs';
 
 // Тестируем настоящий app.js с небольшим DOM-двойником, без камеры, CDN и сборки.
-const geometrySource = await readFile(new URL('../geometry.js', import.meta.url));
-const geometryUrl = `data:text/javascript;base64,${geometrySource.toString('base64')}`;
-const analyzerSource = (await readFile(new URL('../analyzer.js', import.meta.url), 'utf8'))
-  .replace("'./geometry.js'", `'${geometryUrl}'`);
-const analyzerUrl = `data:text/javascript;base64,${Buffer.from(analyzerSource).toString('base64')}`;
+const { geometryUrl, analyzerUrl, factoryUrl } = await browserModuleUrls();
 
 class Element extends EventTarget {
   constructor(id) {
@@ -142,7 +139,8 @@ globalThis.cancelAnimationFrame = (id) => rafs.delete(id);
 const appSource = (await readFile(new URL('../app.js', import.meta.url), 'utf8'))
   .replace("'./geometry.js'", `'${geometryUrl}'`)
   .replace("'./analyzer.js'", `'${analyzerUrl}'`)
-  + `\nexport { formatVideoTime, loadVideoFile, stopCamera, disposePoseLandmarker, squatAnalyzer, workout, updateWorkoutHUD, finishWorkout };
+  .replace("'./exerciseFactory.js'", `'${factoryUrl}'`)
+  + `\nexport { formatVideoTime, loadVideoFile, stopCamera, disposePoseLandmarker, currentAnalyzer as squatAnalyzer, currentAnalyzer, currentExerciseId, selectExercise, processPoseFrame, workout, updateWorkoutHUD, finishWorkout };
 export function setModelForTest(model) { poseLandmarker = model; poseConnections = []; }
 export function activateWorkoutForTest(goal = null) {
   workout.active = true; workout.goal = goal; workout.startedAt = performance.now();
@@ -151,6 +149,7 @@ export function activateWorkoutForTest(goal = null) {
 export function resetWorkoutForTest() {
   workout.active = false; workout.goal = null; workout.startedAt = 0; workout.lastResult = null;
   pendingSource = null; lastSource = { mode: 'camera' }; audioContext = null;
+  selectExercise('squat');
   closeDialog(setupDialog); closeDialog(resultsDialog); setWorkoutInterface(false);
 }
 export function holdModelForTest(pending) {
@@ -536,7 +535,7 @@ test('настройка открывается до камеры; ручное 
   clock = 6500;
   element('finish-workout').click();
   assert.equal(app.workout.active, false);
-  assert.deepEqual(app.workout.lastResult, { reason: 'manual', repCount: 3, goal: 5, durationMs: 6400 });
+  assert.deepEqual(app.workout.lastResult, { reason: 'manual', exerciseId: 'squat', mode: 'reps', repCount: 3, activeHoldTime: null, goal: 5, durationMs: 6400 });
   assert.equal(element('workout-results').open, true);
   assert.equal(element('results-reps').textContent, '3');
   assert.equal(element('results-goal').textContent, 'Цель: 5');
@@ -944,3 +943,439 @@ test('ошибка модели после синхронного достиже
   assert.equal(element('workout-results').open, true);
   assert.equal(audio.starts, 1);
 });
+
+// Интеграционные тесты используют реальные автоматы и синтетические landmarks.
+// Это проверка взаимодействия с UI и временем, а не оценка реальной модели MediaPipe.
+function validPlankPose() {
+  const points = Array.from({ length: 33 }, () => ({ x: NaN, y: NaN, visibility: 0 }));
+  const span = Math.hypot(200, 60);
+  const ankle = { x: 260 + 90 * 200 / span, y: 160 + 90 * 60 / span };
+  const coordinates = [
+    [11, 60, 100], [23, 160, 130], [25, 260, 160],
+    [27, ankle.x, ankle.y], [15, 60, ankle.y + 25]
+  ];
+  for (const [index, x, y] of coordinates) {
+    points[index] = { x: x / 640, y: y / 480, visibility: 1, presence: 1 };
+  }
+  return points;
+}
+function validSidePlankPose() {
+  const points = Array.from({ length: 33 }, () => ({ x: NaN, y: NaN, visibility: 0 }));
+  const coordinates = [
+    [11, 150, 175], [12, 150, 85], [23, 375, 227], [24, 375, 203],
+    [25, 487.5, 264.5], [26, 487.5, 250.5], [27, 600, 303], [28, 600, 297],
+    [29, 592, 310], [30, 592, 310], [31, 612, 310], [32, 612, 310],
+    [13, 150, 310], [15, 165, 310]
+  ];
+  for (const [index, x, y] of coordinates) {
+    points[index] = { x: x / 800, y: y / 600, z: 0, visibility: 1, presence: 1 };
+  }
+  return points;
+}
+const holdPoses = { plank: validPlankPose, sidePlank: validSidePlankPose };
+function chooseExercise(id) {
+  element('exercise-select').value = id;
+  element('exercise-select').dispatchEvent(new Event('change'));
+}
+function nearSeconds(actual, expected) {
+  assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`);
+}
+function fileFrame(time) {
+  video.currentTime = time;
+  clock += 100;
+  nextFrame();
+}
+
+test('селектор создаёт новый автомат, меняет единицы и недоступен во время подхода', async () => {
+  beginIdleTest();
+  navigator.mediaDevices.getUserMedia = async () => makeStream();
+  element('toggle-camera').click();
+  const oldAnalyzer = app.currentAnalyzer;
+  chooseExercise('plank');
+  assert.notEqual(app.currentAnalyzer, oldAnalyzer);
+  assert.equal(app.currentAnalyzer.constructor.name, 'PlankAnalyzer');
+  assert.equal(element('goal-unit').textContent, 'СЕКУНДЫ');
+  assert.deepEqual(goalOptions.map((button) => Number(button.dataset.goal)), [15, 30, 45, 60]);
+  assert.equal(goalOptions[1].getAttribute('aria-pressed'), 'true');
+  assert.equal(element('rep-count-label').textContent, 'СЕКУНД');
+  assert.match(element('exercise-hint').textContent, /сбоку/i);
+  assert.equal(element('squat-view-control').hidden, true);
+
+  chooseExercise('sidePlank');
+  assert.equal(app.currentAnalyzer.constructor.name, 'SidePlankAnalyzer');
+  submitWorkout();
+  await wait(0);
+  const activeAnalyzer = app.currentAnalyzer;
+  assert.equal(element('exercise-select').disabled, true);
+  chooseExercise('lunge'); // даже искусственный change не меняет текущий подход
+  assert.equal(app.currentExerciseId, 'sidePlank');
+  assert.equal(app.currentAnalyzer, activeAnalyzer);
+  assert.equal(element('exercise-select').value, 'sidePlank');
+  app.finishWorkout('manual');
+  assert.equal(element('exercise-select').disabled, false);
+  element('new-workout').click();
+  chooseExercise('squat');
+  assert.equal(app.currentAnalyzer.constructor.name, 'SquatAnalyzer');
+  assert.notEqual(app.currentAnalyzer, oldAnalyzer);
+  assert.equal(element('goal-unit').textContent, 'ПОВТОРЕНИЯ');
+  assert.deepEqual(goalOptions.map((button) => Number(button.dataset.goal)), [5, 10, 15, 20]);
+  assert.equal(element('squat-view-control').hidden, false);
+});
+
+for (const [id, pose] of Object.entries(holdPoses)) {
+  test(`${id}: файл учитывает медиавремя только между подтверждёнными кадрами; пауза, seek и Loop его не добавляют`, async () => {
+    beginIdleTest();
+    app.selectExercise(id);
+    app.activateWorkoutForTest();
+    testPose = pose();
+    await loadFile(`${id}.webm`);
+    assert.equal(app.currentAnalyzer.activeHoldTime, 0, 'первый кадр файла — только предпросмотр');
+    fileFrame(0.1);
+    fileFrame(0.6);
+    fileFrame(1.1);
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 1);
+    assert.equal(element('rep-count').textContent, '1');
+    assert.equal(element('rep-count-label').textContent, 'СЕКУНД');
+    assert.equal(element('squat-phase').textContent, 'Удержание');
+
+    video.pause();
+    assert.equal(element('squat-phase').textContent, 'Пауза');
+    clock += 60000;
+    nextFrame();
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 1);
+    await video.play();
+    fileFrame(1.3); // первый кадр после паузы ничего не добавляет
+    fileFrame(1.8);
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 1.5);
+
+    video.pause();
+    video.seeking = true;
+    video.currentTime = 0.4;
+    video.dispatchEvent(new Event('seeking'));
+    video.seeking = false;
+    video.dispatchEvent(new Event('seeked'));
+    await wait(120); // предпросмотр на паузе не подтверждает интервал
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 1.5);
+    assert.equal(element('squat-phase').textContent, 'Пауза');
+    await video.play();
+    fileFrame(0.5);
+    fileFrame(1.0);
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 2);
+
+    testPose = null;
+    fileFrame(1.5); // поза пропала
+    testPose = pose();
+    fileFrame(2.0); // восстановление
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 2);
+    fileFrame(2.5);
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 2.5);
+    fileFrame(4.0); // неизвестный промежуток больше maxFrameGapSeconds
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 2.5);
+    fileFrame(4.5);
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 3);
+
+    fileFrame(0.1); // Loop без события seeking
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 3);
+    fileFrame(0.6);
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 3.5);
+    const result = app.finishWorkout('manual');
+    nearSeconds(result.activeHoldTime, 3.5);
+    assert.equal(result.exerciseId, id);
+    assert.equal(result.repCount, null);
+    assert.equal(element('results-metric-label').textContent, 'УДЕРЖАНИЕ, СЕК');
+    assert.equal(element('results-reps').textContent, '3');
+    assert.equal(element('results-goal').textContent, 'Свободный режим');
+  });
+
+  test(`${id}: живая камера использует секунды из монотонных часов и сохраняет удержание при смене источника`, async () => {
+    beginIdleTest();
+    app.selectExercise(id);
+    app.activateWorkoutForTest();
+    const stream = makeStream();
+    app.activateCameraForTest(stream);
+    testPose = pose();
+    video.currentTime = 0.1; clock = 100; app.processPoseFrame();
+    video.currentTime = 0.2; clock = 600; app.processPoseFrame();
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 0.5);
+    video.currentTime = 0.3; clock = 2600; app.processPoseFrame(); // длинный пропуск
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 0.5);
+    video.currentTime = 0.4; clock = 2850; app.processPoseFrame();
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 0.75);
+    video.currentTime = 0;
+    await loadFile('new-source.webm');
+    assert.equal(stream.track.readyState, 'ended');
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 0.75);
+    fileFrame(0.1);
+    fileFrame(0.6);
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 1.25);
+  });
+
+  test(`${id}: цель в секундах завершает подход и подаёт ровно один бип`, async () => {
+    beginIdleTest();
+    const audio = installAudioStub();
+    const stream = makeStream();
+    navigator.mediaDevices.getUserMedia = async () => stream;
+    element('toggle-camera').click();
+    chooseExercise(id);
+    selectCustom('1');
+    testPose = pose();
+    submitWorkout();
+    await wait(0);
+    assert.equal(app.workout.goal, 1);
+    assert.equal(element('rep-target').getAttribute('aria-label'), 'Цель: 1 секунда');
+    video.currentTime = 0.1; clock = 100; nextFrame();
+    video.currentTime = 0.2; clock = 600; nextFrame();
+    assert.equal(app.workout.active, true);
+    assert.equal(element('rep-progress').getAttribute('aria-valuetext'), '0 из 1 секунды');
+    video.currentTime = 0.3; clock = 1100; nextFrame();
+    assert.equal(app.workout.active, false);
+    nearSeconds(app.workout.lastResult.activeHoldTime, 1);
+    assert.equal(app.workout.lastResult.reason, 'goal');
+    assert.equal(element('results-reps').textContent, '1');
+    assert.equal(element('results-goal').textContent, 'Цель: 1 с');
+    assert.equal(stream.track.readyState, 'ended');
+    assert.equal(audio.starts, 1);
+    nextFrame();
+    app.finishWorkout('manual');
+    assert.equal(audio.starts, 1);
+  });
+}
+
+test('задержавшиеся результаты до паузы или в неверном порядке не добавляют время', async () => {
+  beginIdleTest();
+  app.selectExercise('plank');
+  app.activateWorkoutForTest();
+  testPose = validPlankPose();
+  await loadFile();
+  fileFrame(0.1);
+  fileFrame(0.2);
+  nearSeconds(app.currentAnalyzer.activeHoldTime, 0.1);
+  const pending = [];
+  app.setModelForTest({ detectForVideo(source, timestamp, callback) { pending.push(callback); }, close() {} });
+  fileFrame(0.4);
+  video.pause();
+  pending.shift()({ landmarks: [testPose] });
+  nearSeconds(app.currentAnalyzer.activeHoldTime, 0.1);
+  await video.play();
+  fileFrame(0.5);
+  fileFrame(0.7);
+  pending.pop()({ landmarks: [testPose] }); // новый кадр приходит первым
+  pending.pop()({ landmarks: [testPose] }); // старый результат игнорируется
+  nearSeconds(app.currentAnalyzer.activeHoldTime, 0.1);
+  fileFrame(0.9);
+  pending.pop()({ landmarks: [testPose] });
+  nearSeconds(app.currentAnalyzer.activeHoldTime, 0.3);
+});
+
+test('автоматы jumping jacks и подтягиваний получают возрастающие timestamps после seek и смены источника', async () => {
+  for (const id of ['jumpingJacks', 'pullup']) {
+    beginIdleTest();
+    app.selectExercise(id);
+    app.activateWorkoutForTest();
+    app.activateCameraForTest(makeStream());
+    const times = [];
+    const original = app.currentAnalyzer.update.bind(app.currentAnalyzer);
+    app.currentAnalyzer.update = (landmarks, timestamp) => { times.push(timestamp); return original(landmarks, timestamp); };
+    for (const currentTime of [0.1, 0.2, 0.3]) {
+      video.currentTime = currentTime;
+      app.processPoseFrame();
+    }
+    video.currentTime = 0;
+    await loadFile(`${id}.webm`);
+    fileFrame(1.0);
+    video.seeking = true;
+    video.currentTime = 0.2;
+    video.dispatchEvent(new Event('seeking'));
+    video.seeking = false;
+    video.dispatchEvent(new Event('seeked'));
+    fileFrame(0.3);
+    assert.ok(times.length >= 6, id);
+    assert.ok(times.every((value, index) => index === 0 || value > times[index - 1]), id);
+  }
+});
+
+test('все упражнения на повторы передают HUD результат и текст собственного анализатора', () => {
+  for (const id of ['bicepCurl', 'lunge', 'overheadPress', 'deadlift', 'jumpingJacks', 'gluteBridge', 'pullup']) {
+    beginIdleTest();
+    app.selectExercise(id);
+    app.activateWorkoutForTest();
+    app.activateCameraForTest(makeStream());
+    const analyzer = app.currentAnalyzer;
+    let observed;
+    const original = analyzer.update.bind(analyzer);
+    analyzer.update = (...args) => { observed = original(...args); return observed; };
+    analyzer.repCount = 2;
+    testPose = validPlankPose(); // видимые точки, не претендующие на корректную позу упражнения
+    video.currentTime = 0.1;
+    app.processPoseFrame();
+    assert.equal(element('rep-count').textContent, '2', id);
+    assert.equal(element('rep-count-label').textContent, 'ПОВТОРОВ', id);
+    assert.equal(element('squat-feedback').textContent, observed.feedbackMessage, id);
+    assert.equal(element('squat-view-control').hidden, true, id);
+    const result = app.finishWorkout('manual');
+    assert.equal(result.exerciseId, id);
+    assert.equal(result.repCount, 2);
+    assert.equal(result.activeHoldTime, null);
+    assert.equal(element('results-metric-label').textContent, 'ПОВТОРЫ');
+  }
+});
+
+function jacksPose(open) {
+  const points = Array.from({ length: 33 }, () => ({ x: NaN, y: NaN, visibility: 0 }));
+  const feet = open ? 1.8 : 0.4;
+  const coordinates = [[11,300,240],[12,420,240],[23,300,410],[24,420,410],
+    [27,360 - feet * 60,730],[28,360 + feet * 60,730],[2,340,180],[5,380,180]];
+  coordinates.push(...(open ? [[13,320,150],[14,400,150],[15,340,70],[16,380,70]]
+    : [[13,300,330],[14,420,330],[15,300,420],[16,420,420]]));
+  for (const [i, x, y] of coordinates) points[i] = { x: x / 720, y: y / 900, visibility: 1, presence: 1 };
+  return points;
+}
+function pullupPose(angle, shoulderY) {
+  const points = Array.from({ length: 33 }, () => ({ x: NaN, y: NaN, visibility: 0 }));
+  function set(i, x, y) { points[i] = { x: x / 900, y: y / 800, visibility: 1, presence: 1 }; }
+  for (const [ids, sx, wx, sign] of [[[11,13,15],365,210,-1], [[12,14,16],535,690,1]]) {
+    const dx = wx - sx, dy = 140 - shoulderY, span = Math.hypot(dx, dy);
+    const offset = span / 2 * Math.tan((180 - angle) * Math.PI / 360);
+    set(ids[0], sx, shoulderY);
+    set(ids[1], (sx + wx) / 2 + sign * (-dy / span) * offset,
+      (shoulderY + 140) / 2 + sign * (dx / span) * offset);
+    set(ids[2], wx, 140);
+  }
+  set(9, 435, shoulderY - 60); set(10, 465, shoulderY - 60); set(0, 450, shoulderY - 100);
+  return points;
+}
+
+test('jumping jacks: полный синтетический цикл через приложение достигает цели', () => {
+  beginIdleTest();
+  app.selectExercise('jumpingJacks');
+  app.activateWorkoutForTest(1);
+  app.activateCameraForTest(makeStream());
+  video.videoWidth = 720; video.videoHeight = 900;
+  for (const [index, open] of [false, true, false].entries()) {
+    testPose = jacksPose(open);
+    clock = 100 + index * 500;
+    video.currentTime = 0.1 + index * 0.1;
+    app.processPoseFrame();
+  }
+  assert.equal(app.workout.active, false);
+  assert.equal(app.workout.lastResult.exerciseId, 'jumpingJacks');
+  assert.equal(app.workout.lastResult.repCount, 1);
+  assert.equal(element('results-reps').textContent, '1');
+});
+
+test('подтягивания: полный синтетический HANG → TOP → HANG через приложение достигает цели', () => {
+  beginIdleTest();
+  app.selectExercise('pullup');
+  app.activateWorkoutForTest(1);
+  app.activateCameraForTest(makeStream());
+  video.videoWidth = 900; video.videoHeight = 800;
+  const frames = [[0,170,500],[100,145,400],[300,70,190],[500,120,330],[700,170,500]];
+  for (const [index, [time, angle, shoulder]] of frames.entries()) {
+    testPose = pullupPose(angle, shoulder);
+    clock = 100 + time;
+    video.currentTime = 0.1 + index * 0.1;
+    app.processPoseFrame();
+  }
+  assert.equal(app.workout.active, false);
+  assert.equal(app.workout.lastResult.exerciseId, 'pullup');
+  assert.equal(app.workout.lastResult.repCount, 1);
+  assert.equal(element('results-reps').textContent, '1');
+});
+
+for (const [id, pose] of Object.entries(holdPoses)) {
+  test(`${id}: возврат из файла к камере сохраняет время, но не переносит неподтверждённый интервал`, async () => {
+    beginIdleTest();
+    app.selectExercise(id);
+    app.activateWorkoutForTest();
+    testPose = pose();
+    await loadFile('source.webm');
+    fileFrame(0.1);
+    fileFrame(0.6);
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 0.5);
+    const stream = makeStream();
+    navigator.mediaDevices.getUserMedia = async () => stream;
+    element('toggle-camera').click();
+    await wait(0);
+    assert.equal(app.inspectForTest().sourceMode, 'camera');
+    assert.deepEqual(revoked, created);
+    video.currentTime = 0.1; clock += 5000; nextFrame();
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 0.5);
+    video.currentTime = 0.2; clock += 250; nextFrame();
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 0.75);
+  });
+}
+
+for (const [id, pose] of Object.entries(holdPoses)) {
+  test(`${id}: одинаковые значения часов камеры не превращаются в искусственные миллисекунды удержания`, () => {
+    beginIdleTest();
+    app.selectExercise(id);
+    app.activateWorkoutForTest();
+    app.activateCameraForTest(makeStream());
+    testPose = pose();
+    for (const time of [0.1, 0.2, 0.3]) {
+      video.currentTime = time;
+      clock = 100; // timestamp модели увеличивается, но реальное время не прошло
+      app.processPoseFrame();
+    }
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 0);
+    video.currentTime = 0.4; clock = 200; app.processPoseFrame();
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 0.1);
+  });
+
+  test(`${id}: небольшой скачок медиавремени назад не начисляет участок дважды`, async () => {
+    beginIdleTest();
+    app.selectExercise(id);
+    app.activateWorkoutForTest();
+    testPose = pose();
+    await loadFile('jitter.webm');
+    fileFrame(0.1);
+    fileFrame(0.6);
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 0.5);
+    fileFrame(0.58); // меньше порога fallback Loop и без события seeking
+    fileFrame(0.65);
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 0.5);
+    fileFrame(0.75);
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 0.6);
+  });
+}
+
+for (const [id, pose] of Object.entries(holdPoses)) {
+  test(`${id}: изменение разрешения с прежними пропорциями прерывает интервал, но сохраняет результат`, () => {
+    beginIdleTest();
+    app.selectExercise(id);
+    app.activateWorkoutForTest();
+    app.activateCameraForTest(makeStream());
+    testPose = pose();
+    video.currentTime = 0.1; clock = 100; app.processPoseFrame();
+    video.currentTime = 0.2; clock = 600; app.processPoseFrame();
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 0.5);
+    video.videoWidth = 640; video.videoHeight = 480; // как 320×240, пропорции те же
+    video.currentTime = 0.3; clock = 1100; app.processPoseFrame();
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 0.5);
+    video.currentTime = 0.4; clock = 1350; app.processPoseFrame();
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 0.75);
+  });
+}
+
+for (const [id, pose] of Object.entries(holdPoses)) {
+  test(`${id}: кадр, опередивший необработанный, не засчитывает промежуток с неизвестной позой`, async () => {
+    beginIdleTest();
+    app.selectExercise(id);
+    app.activateWorkoutForTest();
+    testPose = pose();
+    await loadFile('out-of-order.webm');
+    fileFrame(0.1);
+    fileFrame(0.2);
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 0.1);
+    const callbacks = [];
+    app.setModelForTest({ detectForVideo(source, timestamp, callback) { callbacks.push(callback); }, close() {} });
+    fileFrame(0.3); // в нём могла отсутствовать поза
+    fileFrame(0.4);
+    callbacks.pop()({ landmarks: [testPose] }); // более поздний результат пришёл первым
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 0.1);
+    callbacks.pop()({ landmarks: [] }); // запоздавший кадр уже игнорируется
+    fileFrame(0.5);
+    callbacks.pop()({ landmarks: [testPose] });
+    nearSeconds(app.currentAnalyzer.activeHoldTime, 0.2);
+  });
+}
