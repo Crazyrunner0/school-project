@@ -72,11 +72,11 @@
           <div class="empty-copy" aria-live="polite" aria-atomic="true">
             <p class="eyebrow">БИОМЕХАНИКА ДВИЖЕНИЯ</p>
             <h1 id="empty-title">Движение начинается здесь</h1>
-            <p class="empty-description" id="empty-description">Включите камеру, чтобы подготовить кадр для анализа приседаний.</p>
+            <p class="empty-description" id="empty-description">Включите камеру или выберите видео, чтобы начать анализ.</p>
           </div>
         </section>
 
-        <section class="squat-panel" id="squat-panel" aria-label="Анализ приседаний" hidden>
+        <section class="squat-panel" id="squat-panel" aria-label="Анализ упражнения: приседания" hidden>
           <div class="hud-scoreboard">
             <div class="hud-counter">
               <div class="hud-count-line" id="rep-count-line">
@@ -91,7 +91,7 @@
             </div>
             <span class="hud-divider" aria-hidden="true"></span>
             <div class="hud-phase-group">
-              <span class="hud-kicker">ФАЗА ДВИЖЕНИЯ</span>
+              <span class="hud-kicker" id="active-exercise">ПРИСЕДАНИЯ</span>
               <span class="phase-badge">
                 <span class="phase-dot" aria-hidden="true"></span>
                 <strong id="squat-phase">Подготовка</strong>
@@ -99,7 +99,7 @@
             </div>
           </div>
 
-          <div class="advice-banner" id="advice-banner" data-level="neutral">
+          <div class="advice-banner" id="advice-banner" data-level="neutral" role="region" aria-label="Подсказка по упражнению" tabindex="-1">
             <span class="advice-icon" id="advice-icon" aria-hidden="true">–</span>
             <div class="advice-copy">
               <span class="advice-label" id="advice-label">ПОДГОТОВКА</span>
@@ -107,7 +107,7 @@
             </div>
           </div>
 
-          <label class="squat-view">
+          <label class="squat-view" id="squat-view-control">
             <span>РАКУРС</span>
             <select id="squat-view" aria-label="Ракурс съёмки">
               <option value="auto">Авто</option>
@@ -208,13 +208,35 @@
       </div>
       <div class="setup-body">
         <div class="setup-intro">
-          <h2 id="setup-title">Поставьте <em>цель.</em></h2>
-          <p id="setup-description">Сколько приседаний планируете выполнить?</p>
+          <h2 id="setup-title">Ваш <em>подход.</em></h2>
+          <p id="setup-description">Сколько повторений планируете выполнить?</p>
           <p class="setup-source" id="setup-source">Источник: живая камера</p>
+          <div class="exercise-picker">
+            <label for="exercise-select">УПРАЖНЕНИЕ</label>
+            <div class="exercise-select-wrap">
+              <span class="exercise-select-icon" aria-hidden="true">↗</span>
+              <select id="exercise-select" aria-describedby="exercise-hint">
+                <option value="squat">Приседания</option>
+                <option value="plank">Планка</option>
+                <option value="sidePlank">Боковая планка</option>
+                <option value="bicepCurl">Сгибания рук</option>
+                <option value="lunge">Выпады</option>
+                <option value="overheadPress">Жим вверх</option>
+                <option value="deadlift">Румынская тяга</option>
+                <option value="jumpingJacks">Jumping jacks</option>
+                <option value="gluteBridge">Ягодичный мостик</option>
+                <option value="pullup">Подтягивания</option>
+              </select>
+              <svg class="exercise-select-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="m7 10 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </div>
+            <p class="exercise-hint" id="exercise-hint" aria-live="polite">Камера спереди или сбоку. Покажите тело целиком, включая стопы.</p>
+          </div>
         </div>
         <div class="setup-choices">
           <fieldset class="goal-fieldset">
-            <legend>ПОВТОРЕНИЯ</legend>
+            <legend id="goal-unit">ПОВТОРЕНИЯ</legend>
             <div class="goal-presets" role="group" aria-label="Быстрый выбор цели">
               <button class="goal-option" type="button" data-goal="5" aria-pressed="false">5</button>
               <button class="goal-option" type="button" data-goal="10" aria-pressed="true">10</button>
@@ -229,7 +251,7 @@
           <p class="goal-error" id="goal-error" role="alert" hidden>Введите целое число больше нуля.</p>
           <button class="goal-free" id="free-goal" type="button" aria-pressed="false">
             <span class="free-icon" aria-hidden="true">∞</span>
-            <span><strong>Свободный режим</strong><small>Без ограничения повторений</small></span>
+            <span><strong>Свободный режим</strong><small id="free-goal-description">Без ограничения повторений</small></span>
             <span class="goal-check" aria-hidden="true">✓</span>
           </button>
         </div>
@@ -252,7 +274,7 @@
       <h2 id="results-title">Отличная работа!</h2>
       <p id="results-message">Ваш подход завершён.</p>
       <div class="results-stats">
-        <div><span>ПОВТОРЫ</span><strong id="results-reps">0</strong><small id="results-goal">Свободный режим</small></div>
+        <div><span id="results-metric-label">ПОВТОРЫ</span><strong id="results-reps">0</strong><small id="results-goal">Свободный режим</small></div>
         <div><span>ВРЕМЯ ПОДХОДА</span><strong id="results-duration">00:00</strong><small>с момента старта</small></div>
       </div>
       <button class="start-workout" id="new-workout" type="button"><span>Новый подход</span><span aria-hidden="true">↗</span></button>

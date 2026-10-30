@@ -1,16 +1,14 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { browserModuleUrls } from './helpers/moduleLoader.mjs';
 
 // Загружаем реальный app.js в минимальном DOM без камеры и сторонних зависимостей.
-const geometrySource = await readFile(new URL('../geometry.js', import.meta.url));
-const geometryUrl = `data:text/javascript;base64,${geometrySource.toString('base64')}`;
-const analyzerSource = (await readFile(new URL('../analyzer.js', import.meta.url), 'utf8'))
-  .replace("'./geometry.js'", `'${geometryUrl}'`);
-const analyzerUrl = `data:text/javascript;base64,${Buffer.from(analyzerSource).toString('base64')}`;
+const { geometryUrl, analyzerUrl, factoryUrl } = await browserModuleUrls();
 const { SQUAT_PHASE: PHASE, SQUAT_ERROR: ERROR } = await import(analyzerUrl);
 
 const strokes = [];
+const angleTexts = [];
 const context = {
   currentPath: [],
   clearRect() {},
@@ -25,7 +23,7 @@ const context = {
   translate() {},
   scale() {},
   measureText(text) { return { width: text.length * 8 }; },
-  strokeText() {},
+  strokeText(text) { angleTexts.push(text); },
   fillText() {}
 };
 const elements = new Map();
@@ -53,11 +51,13 @@ globalThis.window = { addEventListener() {} };
 const appSource = (await readFile(new URL('../app.js', import.meta.url), 'utf8'))
   .replace("'./geometry.js'", `'${geometryUrl}'`)
   .replace("'./analyzer.js'", `'${analyzerUrl}'`)
-  + '\nexport { chooseAdvice, updateAdvice, resetAdvice, drawPose, squatAnalyzer };'
+  .replace("'./exerciseFactory.js'", `'${factoryUrl}'`)
+  + '\nexport { chooseAdvice, updateAdvice, resetAdvice, drawPose, selectExercise, currentAnalyzer as squatAnalyzer };'
   + '\nexport function setConnectionsForTest(value) { poseConnections = value; }'
-  + '\nexport function activateWorkoutForTest() { workout.active = true; workout.goal = null; }\n';
+  + '\nexport function activateWorkoutForTest() { workout.active = true; workout.goal = null; }'
+  + '\nexport function deactivateWorkoutForTest() { workout.active = false; }\n';
 const appUrl = `data:text/javascript;base64,${Buffer.from(appSource).toString('base64')}`;
-const { chooseAdvice, updateAdvice, resetAdvice, drawPose, squatAnalyzer, setConnectionsForTest, activateWorkoutForTest } = await import(appUrl);
+const { chooseAdvice, updateAdvice, resetAdvice, drawPose, selectExercise, squatAnalyzer, setConnectionsForTest, activateWorkoutForTest, deactivateWorkoutForTest } = await import(appUrl);
 activateWorkoutForTest();
 
 afterImportCleanup();
@@ -158,10 +158,24 @@ test('Canvas рисует неоновый скелет и красным тол
   strokes.length = 0;
   drawPose({ landmarks: [pose] });
   assert.ok(strokes.some((stroke) => stroke.color === 'rgba(102, 255, 191, 0.82)'));
+  assert.ok(angleTexts.length > 0, 'подписи углов доступны для приседаний');
   const red = strokes.filter((stroke) => stroke.color === '#ff4954');
   assert.equal(red.length, 1);
   assert.deepEqual(red[0].points, [['M', 0.65 * 640, 0.2 * 640], ['L', 0.35 * 640, 0.4 * 640]]);
   assert.match(shown().text, /наклон корпуса/i);
   drawPose({ landmarks: [] });
   assert.deepEqual(squatAnalyzer.getHighlightedSegments(), []);
+});
+
+test('другие упражнения не получают приседальные углы и сегменты подсветки', () => {
+  deactivateWorkoutForTest();
+  selectExercise('bicepCurl');
+  activateWorkoutForTest();
+  const pose = Array.from({ length: 33 }, () => ({ x: 0.4, y: 0.4, visibility: 1 }));
+  strokes.length = 0;
+  angleTexts.length = 0;
+  drawPose({ landmarks: [pose] });
+  assert.ok(strokes.some((stroke) => stroke.color === 'rgba(102, 255, 191, 0.82)'));
+  assert.ok(strokes.every((stroke) => !['#ff4954', '#ffcf63'].includes(stroke.color)));
+  assert.deepEqual(angleTexts, []);
 });
