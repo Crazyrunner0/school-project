@@ -1265,10 +1265,650 @@ button {
   }
 }
 
+/* Управление подходом остаётся доступным даже во время загрузки источника. */
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+  min-width: 0;
+}
+
+.finish-workout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 8px 12px;
+  color: #ffe5df;
+  border: 1px solid rgba(255, 147, 133, 0.52);
+  border-radius: 12px;
+  background: rgba(123, 42, 39, 0.86);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.15;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.finish-workout svg {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  color: #ffb0a2;
+}
+
+.finish-workout:hover {
+  background: rgba(157, 55, 48, 0.94);
+}
+
+.finish-copy {
+  display: flex;
+  gap: 3px;
+}
+
+.finish-workout:focus-visible,
+.goal-option:focus-visible,
+.goal-free:focus-visible,
+.custom-goal input:focus-visible,
+.dialog-close:focus-visible,
+.start-workout:focus-visible,
+.results-dismiss:focus-visible {
+  outline: 2px solid #e9ffd6;
+  outline-offset: 3px;
+}
+
+.hud-count-line {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+}
+
+.hud-counter .hud-count-target {
+  max-width: 110px;
+  color: #d4e8d7;
+  font-size: 19px;
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.hud-count-line[data-compact="true"] {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.hud-count-line[data-compact="true"] .hud-count-target {
+  max-width: none;
+  white-space: nowrap;
+}
+
+.hud-progress {
+  overflow: hidden;
+  width: 100%;
+  min-width: 72px;
+  height: 4px;
+  margin-top: 2px;
+  border-radius: 100px;
+  background: rgba(210, 237, 219, 0.18);
+}
+
+.hud-counter .hud-progress-fill {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: #b7f5cb;
+  transition: width 180ms ease;
+}
+
+.controls[data-workout="active"] .controls-hint,
+.controls[data-workout="active"] .privacy-note {
+  display: none;
+}
+
+.controls[data-workout="active"][data-source="camera"] .actions {
+  margin-top: 10px;
+}
+
+/* Настройка и итоги — нативные диалоги с фокусом и затемнением фона. */
+.workout-dialog {
+  position: fixed;
+  inset: 0;
+  width: min(456px, calc(100% - 32px));
+  max-width: none;
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
+  margin: auto;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  color: #f1f7ee;
+  border: 1px solid rgba(192, 239, 188, 0.25);
+  border-radius: 24px;
+  background: linear-gradient(155deg, #203129 0%, #141f19 46%, #0e1712 100%);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.58), inset 0 1px rgba(255, 255, 255, 0.07);
+}
+
+.workout-dialog:not([open]) { display: none; }
+.workout-dialog[open] { display: block; }
+
+.workout-dialog::backdrop {
+  background: rgba(2, 8, 5, 0.78);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+
+.workout-form,
+.results-content {
+  padding: 22px;
+}
+
+.dialog-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.dialog-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #a7c1a5;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+}
+
+.dialog-eyebrow > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #c9f492;
+  box-shadow: 0 0 10px rgba(201, 244, 146, 0.6);
+}
+
+.dialog-close {
+  display: grid;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  place-items: center;
+  color: #c0d0bd;
+  border: 1px solid rgba(224, 243, 213, 0.13);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 23px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.setup-intro h2,
+.results-content h2 {
+  margin: 0;
+  font-size: clamp(27px, 7vw, 36px);
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.045em;
+}
+
+.setup-intro h2 em {
+  color: #d0f291;
+  font-style: normal;
+}
+
+.setup-intro p,
+.results-content > p {
+  margin: 9px 0 0;
+  color: #aabda9;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.setup-intro .setup-source {
+  overflow: hidden;
+  margin-top: 9px;
+  color: #cde7be;
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.setup-choices {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.goal-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.goal-fieldset legend,
+.custom-goal > span {
+  margin-bottom: 8px;
+  color: #9fb49e;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.goal-presets {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.goal-option {
+  min-height: 48px;
+  color: #d9e8d8;
+  border: 1px solid rgba(223, 242, 219, 0.16);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 18px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.goal-option[aria-pressed="true"] {
+  color: #172315;
+  border-color: #d0f291;
+  background: #d0f291;
+  box-shadow: 0 0 0 3px rgba(208, 242, 145, 0.1);
+}
+
+.custom-goal {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.custom-goal input {
+  width: 100%;
+  min-width: 0;
+  min-height: 45px;
+  padding: 10px 13px;
+  color: #f1f7ee;
+  border: 1px solid rgba(223, 242, 219, 0.16);
+  border-radius: 12px;
+  background: rgba(4, 12, 7, 0.36);
+  font: inherit;
+  font-size: 16px;
+}
+
+.custom-goal input::placeholder {
+  color: #718575;
+}
+
+.custom-goal input[aria-invalid="true"] {
+  border-color: #ff8b82;
+}
+
+.goal-error {
+  margin: -4px 0 0;
+  color: #ffb0a2;
+  font-size: 12px;
+}
+
+.goal-free {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 55px;
+  padding: 9px 12px;
+  color: #e7f0e3;
+  border: 1px solid rgba(223, 242, 219, 0.16);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.035);
+  text-align: left;
+  cursor: pointer;
+}
+
+.goal-free[aria-pressed="true"] {
+  border-color: #c6f391;
+  background: rgba(191, 239, 145, 0.11);
+}
+
+.free-icon {
+  display: grid;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  color: #d3f5a8;
+  border-radius: 10px;
+  background: rgba(202, 243, 161, 0.1);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.goal-free strong,
+.goal-free small {
+  display: block;
+}
+
+.goal-free strong {
+  font-size: 13px;
+}
+
+.goal-free small {
+  margin-top: 3px;
+  color: #9eaf9d;
+  font-size: 10px;
+}
+
+.goal-check {
+  margin-left: auto;
+  color: #d0f291;
+  opacity: 0;
+}
+
+.goal-free[aria-pressed="true"] .goal-check {
+  opacity: 1;
+}
+
+.start-workout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 54px;
+  margin-top: 18px;
+  padding: 12px 17px;
+  color: #172315;
+  border: 0;
+  border-radius: 13px;
+  background: #d0f291;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.start-workout:hover {
+  background: #e0ffa7;
+}
+
+.start-workout > span:last-child {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.dialog-footnote {
+  margin: 10px 0 0;
+  color: #829580;
+  font-size: 10px;
+  text-align: center;
+}
+
+.results-mark {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 16px;
+  place-items: center;
+  color: #d5f9a7;
+  border: 1px solid rgba(202, 244, 157, 0.3);
+  border-radius: 16px;
+  background: rgba(195, 239, 150, 0.1);
+  font-size: 25px;
+  font-weight: 700;
+}
+
+.results-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.results-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid rgba(210, 238, 202, 0.12);
+  border-radius: 14px;
+  background: rgba(6, 16, 9, 0.35);
+}
+
+.results-stats span {
+  color: #98ae98;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.results-stats strong {
+  color: #c6ffdd;
+  font-size: 29px;
+  line-height: 1;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.results-stats small {
+  color: #a7b9a5;
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.results-dismiss {
+  display: block;
+  min-height: 44px;
+  margin: 4px auto -6px;
+  padding: 8px 12px;
+  color: #aabda9;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+@media (max-width: 560px) {
+  /* Сохраняем статус в дереве доступности, освобождая место кнопке завершения. */
+  .topbar[data-workout="active"] .status {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .finish-copy {
+    flex-direction: column;
+    gap: 0;
+    align-items: flex-start;
+  }
+
+  .workout-dialog {
+    top: auto;
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (max-width: 300px) {
+  .finish-workout {
+    gap: 5px;
+    padding: 6px 8px;
+    font-size: 10px;
+  }
+
+  .workout-form,
+  .results-content {
+    padding: 18px;
+  }
+
+  .hud-counter .hud-count-target {
+    font-size: 16px;
+  }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .workout-dialog {
+    top: 0;
+    bottom: 0;
+    width: min(680px, calc(100% - 24px));
+  }
+
+  .workout-form,
+  .results-content {
+    padding: 12px 16px;
+  }
+
+  .dialog-topline {
+    margin-bottom: 6px;
+  }
+
+  .dialog-close {
+    flex-basis: 32px;
+    width: 32px;
+    height: 32px;
+  }
+
+  .setup-body {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: 16px;
+    align-items: start;
+  }
+
+  .setup-intro h2,
+  .results-content h2 {
+    font-size: 26px;
+  }
+
+  .setup-choices {
+    gap: 6px;
+    margin-top: 0;
+  }
+
+  .goal-fieldset legend,
+  .custom-goal > span {
+    margin-bottom: 4px;
+    font-size: 8px;
+  }
+
+  .goal-option,
+  .custom-goal input {
+    min-height: 38px;
+    padding-top: 5px;
+    padding-bottom: 5px;
+  }
+
+  .goal-free {
+    min-height: 42px;
+    padding: 5px 8px;
+  }
+
+  .goal-free small {
+    display: none;
+  }
+
+  .start-workout {
+    min-height: 42px;
+    margin-top: 8px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .dialog-footnote {
+    display: none;
+  }
+
+  .results-mark {
+    display: none;
+  }
+
+  .results-stats {
+    margin-top: 10px;
+  }
+
+  .results-stats > div {
+    gap: 3px;
+    padding: 8px 10px;
+  }
+
+  .results-stats strong {
+    font-size: 23px;
+  }
+
+  .results-dismiss {
+    min-height: 34px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     transition-duration: 0.01ms !important;
   }
+}
+
+/* Низкие портретные экраны: действия диалогов остаются видны без прокрутки. */
+@media (max-height: 600px) and (orientation: portrait) {
+  .workout-form,
+  .results-content { padding: 16px; }
+  .dialog-topline { margin-bottom: 8px; }
+  .setup-intro h2,
+  .results-content h2 { font-size: 26px; }
+  .setup-intro p,
+  .results-content > p { margin-top: 6px; font-size: 12px; }
+  .setup-intro .setup-source { margin-top: 5px; }
+  .setup-choices { margin-top: 12px; gap: 8px; }
+  .goal-fieldset legend,
+  .custom-goal > span { margin-bottom: 5px; }
+  .goal-option { min-height: 42px; }
+  .custom-goal input { min-height: 40px; }
+  .goal-free { min-height: 46px; padding: 6px 10px; }
+  .goal-free small { display: none; }
+  .start-workout { min-height: 48px; margin-top: 12px; }
+  .dialog-footnote { display: none; }
+  .results-mark { width: 38px; height: 38px; margin-bottom: 8px; }
+  .results-stats { gap: 8px; margin-top: 12px; }
+  .results-stats > div { padding: 10px; }
+  .results-stats strong { font-size: clamp(20px, 7vw, 26px); }
+  .results-dismiss { min-height: 38px; }
+}
+
+@media (max-height: 400px) and (orientation: landscape) {
+  .hud-scoreboard { padding: 7px 10px; gap: 8px; }
+  .hud-counter #rep-count-label { font-size: 8px; letter-spacing: 0.1em; }
+  .hud-kicker { font-size: 8px; letter-spacing: 0.06em; white-space: nowrap; }
+  .phase-badge { gap: 4px; padding: 4px 5px; font-size: 10px; }
+  .phase-badge strong { overflow-wrap: normal; white-space: nowrap; }
+}
+
+/* На невысоком экране плеер занимает больше места, поэтому HUD видео компактнее. */
+@media (max-height: 500px) and (orientation: portrait) {
+  .interface[data-source="file"] .hud-scoreboard { min-height: 60px; padding-top: 6px; padding-bottom: 6px; }
+  .interface[data-source="file"] .hud-counter { gap: 2px; }
+  .interface[data-source="file"] .hud-counter output { font-size: 28px; }
+  .interface[data-source="file"] .hud-progress { height: 3px; margin-top: 0; }
+  .interface[data-source="file"] .hud-phase-group { gap: 4px; }
+  .interface[data-source="file"] .phase-badge { padding: 5px 7px; }
+  .interface[data-source="file"] .advice-banner { width: calc(100% - 32px); gap: 8px; padding: 7px 10px; }
+  .interface[data-source="file"] .advice-icon { flex-basis: 30px; width: 30px; height: 30px; }
+  .interface[data-source="file"] .advice-label { margin-bottom: 2px; }
+  .interface[data-source="file"] .advice-message { font-size: 12px; line-height: 1.25; }
 }

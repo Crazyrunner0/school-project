@@ -18,6 +18,7 @@ const canvas = document.getElementById('overlay');
 const context = canvas.getContext('2d');
 const cameraView = document.getElementById('camera-view');
 const controls = document.getElementById('controls');
+const interfaceRoot = document.getElementById('interface');
 const sourceLabel = document.getElementById('source-label');
 const viewfinderSource = document.getElementById('viewfinder-source');
 const toggleButton = document.getElementById('toggle-camera');
@@ -47,6 +48,29 @@ const trackingStatus = document.getElementById('tracking-status');
 const poseNotice = document.getElementById('pose-notice');
 const squatPanel = document.getElementById('squat-panel');
 const repCount = document.getElementById('rep-count');
+const repCountLine = document.getElementById('rep-count-line');
+const repTarget = document.getElementById('rep-target');
+const repProgress = document.getElementById('rep-progress');
+const repProgressFill = document.getElementById('rep-progress-fill');
+const topbar = document.getElementById('topbar');
+const finishButton = document.getElementById('finish-workout');
+const setupDialog = document.getElementById('workout-setup');
+const workoutForm = document.getElementById('workout-form');
+const setupSource = document.getElementById('setup-source');
+const cancelSetup = document.getElementById('cancel-setup');
+const goalOptions = [...document.querySelectorAll('.goal-option')];
+const customGoal = document.getElementById('custom-goal');
+const goalError = document.getElementById('goal-error');
+const freeGoal = document.getElementById('free-goal');
+const resultsDialog = document.getElementById('workout-results');
+const resultsTitle = document.getElementById('results-title');
+const resultsMessage = document.getElementById('results-message');
+const resultsReps = document.getElementById('results-reps');
+const resultsGoal = document.getElementById('results-goal');
+const resultsDuration = document.getElementById('results-duration');
+const newWorkout = document.getElementById('new-workout');
+const closeResults = document.getElementById('close-results');
+const dismissResults = document.getElementById('dismiss-results');
 const squatPhase = document.getElementById('squat-phase');
 const squatFeedback = document.getElementById('squat-feedback');
 const adviceBanner = document.getElementById('advice-banner');
@@ -76,6 +100,14 @@ let explicitFacingMode = false;
 let state = 'idle';
 let requestId = 0;
 
+// Подход не зависит от источника: смена камеры/файла сохраняет его счётчик.
+const workout = { active: false, goal: null, startedAt: 0, runId: 0, lastResult: null };
+let goalMode = 'preset';
+let selectedGoal = 10;
+let pendingSource = null;
+let lastSource = { mode: 'camera' };
+let audioContext = null;
+
 // Модель создаётся один раз и повторно используется при остановке или смене камеры.
 let poseLandmarker = null;
 let poseConnections = [];
@@ -84,6 +116,209 @@ let poseGeneration = 0;
 let animationFrameId = null;
 let lastVideoTime = -1;
 let lastInferenceTimestamp = -1;
+
+function setWorkoutInterface(active) {
+  finishButton.hidden = !active;
+  topbar.dataset.workout = active ? 'active' : 'idle';
+  controls.dataset.workout = active ? 'active' : 'idle';
+  if (!active) {
+    repTarget.hidden = true;
+    repProgress.hidden = true;
+  }
+}
+
+function updateWorkoutHUD(count) {
+  const countText = String(count);
+  // aria-live не должен повторно озвучивать прежнее значение на каждом кадре.
+  if (repCount.textContent !== countText) repCount.textContent = countText;
+  repTarget.hidden = !workout.active;
+  if (!workout.active) {
+    repProgress.hidden = true;
+    return;
+  }
+
+  const targetText = workout.goal === null ? '∞' : `/ ${workout.goal}`;
+  const targetLabel = workout.goal === null
+    ? 'Свободный режим, без цели' : `Цель: ${workout.goal} повторений`;
+  // Даже очень длинную пользовательскую цель показываем целиком, не заслоняя фазу.
+  const goalLength = workout.goal === null ? 0 : String(workout.goal).length;
+  const compactTarget = goalLength > 4;
+  if (repCountLine.dataset.compact !== String(compactTarget)) repCountLine.dataset.compact = String(compactTarget);
+  const targetFontSize = compactTarget
+    ? `${Number(Math.max(7, Math.min(14, 132 / (goalLength + 2))).toFixed(2))}px` : '';
+  if (repTarget.style.fontSize !== targetFontSize) repTarget.style.fontSize = targetFontSize;
+  if (repTarget.textContent !== targetText) repTarget.textContent = targetText;
+  if (repTarget.getAttribute('aria-label') !== targetLabel) repTarget.setAttribute('aria-label', targetLabel);
+
+  if (workout.goal === null) {
+    repProgress.hidden = true;
+    repProgressFill.style.width = '0%';
+    return;
+  }
+
+  const progress = Math.min(count, workout.goal);
+  const maximum = String(workout.goal);
+  const current = String(progress);
+  const valueText = `${progress} из ${workout.goal} повторений`;
+  const width = `${progress / workout.goal * 100}%`;
+  repProgress.hidden = false;
+  if (repProgress.getAttribute('aria-valuemax') !== maximum) repProgress.setAttribute('aria-valuemax', maximum);
+  if (repProgress.getAttribute('aria-valuenow') !== current) repProgress.setAttribute('aria-valuenow', current);
+  if (repProgress.getAttribute('aria-valuetext') !== valueText) repProgress.setAttribute('aria-valuetext', valueText);
+  if (repProgressFill.style.width !== width) repProgressFill.style.width = width;
+}
+
+function chooseGoal(mode, value = null) {
+  goalMode = mode;
+  selectedGoal = mode === 'preset' ? value : null;
+  for (const button of goalOptions) {
+    button.setAttribute('aria-pressed', String(mode === 'preset' && Number(button.dataset.goal) === value));
+  }
+  freeGoal.setAttribute('aria-pressed', String(mode === 'free'));
+  if (mode !== 'custom') customGoal.value = '';
+  customGoal.setAttribute('aria-invalid', 'false');
+  goalError.hidden = true;
+}
+
+function readWorkoutGoal() {
+  if (goalMode === 'free') return null;
+  if (goalMode === 'preset') return selectedGoal;
+  const value = customGoal.value.trim();
+  const number = Number(value);
+  if (!value || !Number.isSafeInteger(number) || number <= 0) {
+    customGoal.focus();
+    customGoal.setAttribute('aria-invalid', 'true');
+    goalError.hidden = false;
+    return undefined;
+  }
+  return number;
+}
+
+function isDialogOpen(dialog) {
+  // Запасной вариант для браузеров без HTMLDialogElement.
+  return dialog.open === true || dialog.getAttribute('open') !== null;
+}
+
+function openDialog(dialog) {
+  if (isDialogOpen(dialog)) return;
+  if (typeof dialog.showModal === 'function') dialog.showModal();
+  else dialog.setAttribute('open', '');
+}
+
+function closeDialog(dialog) {
+  if (!isDialogOpen(dialog)) return;
+  if (typeof dialog.close === 'function') dialog.close();
+  else dialog.removeAttribute('open');
+}
+
+// Окно открывается до getUserMedia и до декодирования выбранного файла.
+function openWorkoutSetup(source) {
+  if (workout.active) return;
+  pendingSource = source;
+  chooseGoal('preset', 10);
+  setupSource.textContent = source.mode === 'file'
+    ? `Источник: ${source.file.name}` : 'Источник: живая камера';
+  setupSource.title = setupSource.textContent;
+  openDialog(setupDialog);
+  goalOptions.find((button) => Number(button.dataset.goal) === 10)?.focus();
+}
+
+// AudioContext создаётся или разблокируется непосредственно по нажатию
+// «Начать подход»: это необходимо для звука в большинстве мобильных браузеров.
+function prepareCompletionSound() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    if (!audioContext || audioContext.state === 'closed') audioContext = new AudioContextClass();
+    if (audioContext.state !== 'running') audioContext.resume().catch(() => {});
+  } catch (error) {
+    // Отсутствие Web Audio или запрет браузера не должны мешать завершению.
+    console.warn('Звуковой сигнал недоступен:', error);
+    audioContext = null;
+  }
+}
+
+function playCompletionBeep(runId) {
+  const audio = audioContext;
+  if (!audio || audio.state === 'closed') return;
+  const play = () => {
+    // Позднее разрешение браузера не должно прозвучать в следующем подходе.
+    if (audioContext !== audio || audio.state !== 'running' || workout.runId !== runId || workout.active) return;
+    try {
+      const oscillator = audio.createOscillator();
+      const gain = audio.createGain();
+      const now = audio.currentTime;
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(660, now);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.12, now + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.25);
+      oscillator.connect(gain);
+      gain.connect(audio.destination);
+      oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+      oscillator.start(now);
+      oscillator.stop(now + 0.26);
+    } catch (error) {
+      console.warn('Не удалось воспроизвести сигнал:', error);
+    }
+  };
+  if (audio.state === 'running') play();
+  else audio.resume().then(play).catch(() => {});
+}
+
+// Шаг 6 сможет расширить этот экран, используя сохранённый снимок результата.
+function showWorkoutResults(result) {
+  resultsTitle.textContent = result.reason === 'goal' ? 'Цель достигнута!' : 'Отличная работа!';
+  resultsMessage.textContent = result.reason === 'goal'
+    ? 'Вы завершили запланированный подход.' : 'Вы завершили подход самостоятельно.';
+  resultsReps.textContent = String(result.repCount);
+  resultsGoal.textContent = result.goal === null ? 'Свободный режим' : `Цель: ${result.goal}`;
+  resultsDuration.textContent = formatVideoTime(result.durationMs / 1000);
+  openDialog(resultsDialog);
+}
+
+function finishWorkout(reason = 'manual') {
+  if (!workout.active) return null; // Повторный клик и запоздавшие кадры игнорируем.
+  const result = Object.freeze({
+    reason,
+    repCount: squatAnalyzer.repCount,
+    goal: workout.goal,
+    durationMs: Math.max(0, performance.now() - workout.startedAt)
+  });
+  workout.active = false; // Блокируем подсчёт до остановки потока и показа итогов.
+  workout.lastResult = result;
+  setWorkoutInterface(false);
+  stopCamera();
+  if (reason === 'goal') playCompletionBeep(workout.runId);
+  showWorkoutResults(result);
+  return result;
+}
+
+function startWorkout(event) {
+  event.preventDefault();
+  if (workout.active || !pendingSource) return;
+  const goal = readWorkoutGoal();
+  if (goal === undefined) return;
+  const source = pendingSource;
+  pendingSource = null;
+  closeDialog(setupDialog);
+
+  workout.active = true;
+  workout.goal = goal;
+  workout.startedAt = performance.now();
+  workout.runId += 1;
+  workout.lastResult = null;
+  lastSource = source;
+  setWorkoutInterface(true);
+  resetAnalysisSession();
+  if (goal !== null) prepareCompletionSound();
+
+  if (source.mode === 'file') switchSource('file', source.file);
+  else {
+    setSourceMode('camera');
+    startCamera(facingMode, explicitFacingMode);
+  }
+}
 
 function setFacingMode(mode) {
   facingMode = mode;
@@ -95,6 +330,7 @@ function setFacingMode(mode) {
 function setSourceMode(mode, fileName = '') {
   sourceMode = mode;
   controls.dataset.source = mode;
+  interfaceRoot.dataset.source = mode;
   uploadButton.setAttribute('aria-pressed', String(mode === 'file'));
   sourceLabel.textContent = mode === 'file' ? 'ВИДЕОФАЙЛ' : 'ВЫБРАННАЯ КАМЕРА';
   viewfinderSource.textContent = mode === 'file' ? 'АНАЛИЗ ВИДЕО' : 'ВИД ИЗ КАМЕРЫ';
@@ -191,7 +427,7 @@ function setTrackingState(nextState, message = '') {
   };
   trackingState = nextState;
   trackingStatus.textContent = labels[nextState];
-  squatPanel.hidden = nextState !== 'running';
+  squatPanel.hidden = nextState !== 'running' || !workout.active;
   poseNotice.textContent = message;
   poseNotice.hidden = !message;
   if (sourceMode === 'file' && fileReady) updateVideoControls();
@@ -250,7 +486,7 @@ function releaseSource() {
 
 function resetAnalysisSession() {
   squatAnalyzer.reset();
-  repCount.textContent = '0';
+  updateWorkoutHUD(0);
   squatPhase.textContent = SQUAT_PHASE_LABELS.WAITING;
   resetAdvice();
 }
@@ -353,11 +589,10 @@ function waitForVideoData(url) {
 // Оба источника используют один video/canvas и одну модель. Сам файл остаётся
 // на устройстве: blob URL освобождается при замене или возврате к камере.
 async function loadVideoFile(file) {
-  if (!file) return;
+  if (!file || !workout.active) return;
   const currentRequest = ++requestId;
   releaseSource();
   setSourceMode('file', file.name);
-  resetAnalysisSession();
   setNotice();
   setState('starting');
   video.autoplay = false;
@@ -665,13 +900,14 @@ function resetAdvice() {
 
 // Обновляем счётчик и фазу на каждом кадре, а рекомендацию — с выдержкой.
 function updateSquatAnalysis(landmarks) {
+  if (!workout.active) return null;
   squatAnalyzer.setFrameSize(canvas.width, canvas.height);
   const result = squatAnalyzer.update(landmarks);
-  const count = String(result.repCount);
   const phase = SQUAT_PHASE_LABELS[result.currentPhase];
-  if (repCount.textContent !== count) repCount.textContent = count;
+  updateWorkoutHUD(result.repCount);
   if (squatPhase.textContent !== phase) squatPhase.textContent = phase;
   updateAdvice(result);
+  if (workout.goal !== null && result.repCount >= workout.goal) finishWorkout('goal');
   return result;
 }
 
@@ -701,6 +937,7 @@ function drawHighlightedSegments(landmarks, segments, width, height, lineWidth) 
 
 // Колбэк MediaPipe вызывается синхронно; результат используется без копирования масок.
 function drawPose(result) {
+  if (!workout.active) return;
   const width = canvas.width;
   const height = canvas.height;
   context.clearRect(0, 0, width, height);
@@ -708,7 +945,7 @@ function drawPose(result) {
   const landmarks = result.landmarks?.[0];
   // Передаём и отсутствие позы, чтобы автомат не засчитал повтор через потерянные кадры.
   updateSquatAnalysis(landmarks ?? null);
-  if (!landmarks) return;
+  if (!workout.active || !landmarks) return;
 
   // X и Y нормированы по размеру кадра и могут выходить за его границы.
   const shortSide = Math.min(width, height);
@@ -758,7 +995,7 @@ function drawPose(result) {
 // Источник может быть камерой или локальным видео. Пока модель жива, её
 // timestamps не сбрасываются при seek, Loop или переключении источника.
 function hasActiveSource() {
-  return state === 'running' && (sourceMode === 'camera' ? Boolean(stream) : isActiveFile());
+  return workout.active && state === 'running' && (sourceMode === 'camera' ? Boolean(stream) : isActiveFile());
 }
 
 function resetPartialTracking() {
@@ -784,9 +1021,16 @@ function processPoseFrame(force = false) {
   const timestamp = Math.max(performance.now(), lastInferenceTimestamp + 1);
   lastInferenceTimestamp = timestamp;
 
+  const frameRequest = requestId;
+  const frameWorkout = workout.runId;
   try {
-    poseLandmarker.detectForVideo(video, timestamp, drawPose);
+    poseLandmarker.detectForVideo(video, timestamp, (result) => {
+      // Даже если реализация вернёт кадр с задержкой, он не попадёт в другой подход или источник.
+      if (workout.active && requestId === frameRequest && workout.runId === frameWorkout) drawPose(result);
+    });
   } catch (error) {
+    // Достижение цели могло остановить источник прямо внутри синхронного колбэка.
+    if (!workout.active || requestId !== frameRequest || workout.runId !== frameWorkout) return;
     console.error('Ошибка обработки позы:', error);
     stopPoseLoop();
     disposePoseLandmarker();
@@ -826,6 +1070,7 @@ function schedulePausedPreview() {
 }
 
 async function startPoseTracking(currentRequest) {
+  if (!workout.active || currentRequest !== requestId) return;
   setTrackingState('loading');
   try {
     if (!context) throw new Error('Canvas 2D is unavailable');
@@ -857,6 +1102,7 @@ async function startPoseTracking(currentRequest) {
 }
 
 async function startCamera(mode, exact = false) {
+  if (!workout.active) return { cancelled: true };
   const currentRequest = ++requestId;
   let newStream;
   setNotice();
@@ -961,22 +1207,27 @@ async function switchCamera() {
   }
 }
 
-// Единая точка переключения: выбор файла или возврат к живой камере.
+// Внутри активного подхода смена источника сбрасывает фазу, но не счётчик.
 function switchSource(mode, file = null) {
-  if (mode === 'file') return file ? loadVideoFile(file) : undefined;
+  if (!workout.active) return;
+  if (mode === 'file') {
+    if (!file) return;
+    lastSource = { mode: 'file', file };
+    return loadVideoFile(file);
+  }
   if (mode !== 'camera' || sourceMode !== 'file') return;
 
-  // Сначала отменяем файловую загрузку/RAF и освобождаем blob URL,
-  // затем запрашиваем новую камеру (прежние треки уже остановлены).
   requestId += 1;
   releaseSource();
   setSourceMode('camera');
-  resetAnalysisSession();
+  lastSource = { mode: 'camera' };
   return startCamera(facingMode, explicitFacingMode);
 }
 
 toggleButton.addEventListener('click', () => {
-  if (sourceMode === 'file') {
+  if (!workout.active) {
+    openWorkoutSetup({ mode: 'camera' });
+  } else if (sourceMode === 'file') {
     switchSource('camera');
   } else if (state === 'running' || state === 'starting') {
     stopCamera();
@@ -990,7 +1241,34 @@ videoFileInput.addEventListener('change', () => {
   const file = videoFileInput.files?.[0];
   // Повторный выбор того же файла тоже должен вызвать change.
   videoFileInput.value = '';
-  if (file) switchSource('file', file);
+  if (!file) return;
+  if (workout.active) switchSource('file', file);
+  else openWorkoutSetup({ mode: 'file', file });
+});
+
+for (const button of goalOptions) {
+  button.addEventListener('click', () => chooseGoal('preset', Number(button.dataset.goal)));
+}
+customGoal.addEventListener('focus', () => {
+  if (goalMode !== 'custom') chooseGoal('custom');
+});
+customGoal.addEventListener('input', () => chooseGoal('custom'));
+freeGoal.addEventListener('click', () => chooseGoal('free'));
+workoutForm.addEventListener('submit', startWorkout);
+cancelSetup.addEventListener('click', () => {
+  pendingSource = null;
+  closeDialog(setupDialog);
+});
+setupDialog.addEventListener('close', () => {
+  // Событие close может прийти после повторного открытия другого диалога настройки.
+  if (!isDialogOpen(setupDialog)) pendingSource = null;
+});
+finishButton.addEventListener('click', () => finishWorkout('manual'));
+closeResults.addEventListener('click', () => closeDialog(resultsDialog));
+dismissResults.addEventListener('click', () => closeDialog(resultsDialog));
+newWorkout.addEventListener('click', () => {
+  closeDialog(resultsDialog);
+  openWorkoutSetup(lastSource);
 });
 
 videoPlay.addEventListener('click', async () => {
@@ -1094,6 +1372,15 @@ video.addEventListener('loadedmetadata', syncCanvasSize);
 video.addEventListener('resize', syncCanvasSize);
 window.addEventListener('resize', syncCanvasSize);
 window.addEventListener('pagehide', () => {
+  workout.active = false;
+  workout.runId += 1; // Отменяем отложенный звук, если страница уходит в bfcache.
+  setWorkoutInterface(false);
+  pendingSource = null;
+  lastSource = { mode: 'camera' };
+  closeDialog(setupDialog);
+  closeDialog(resultsDialog);
   stopCamera();
   disposePoseLandmarker();
+  if (audioContext && audioContext.state !== 'closed') audioContext.close().catch(() => {});
+  audioContext = null;
 });
