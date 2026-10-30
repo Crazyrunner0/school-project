@@ -100,6 +100,7 @@ async function run() {
       (frame, i) => !i || frame.timestamp > values[i - 1].timestamp));
 
     await page.click('#toggle-camera');
+    await page.click('#start-workout');
     await state('running');
     await tracking();
     await page.waitForFunction(() => window.__frames.length > 0);
@@ -217,6 +218,7 @@ async function run() {
       };
     });
     await page.locator('#videoFileInput').setInputFiles(fixture);
+    await page.click('#start-workout');
     await tracking();
     await page.waitForFunction(() => document.querySelector('#status-text').textContent === 'Нажмите Play');
     await page.waitForFunction(() => window.__frames.length === 1);

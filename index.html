@@ -24,8 +24,8 @@
       <canvas id="overlay" width="1280" height="720"></canvas>
     </div>
 
-    <div class="interface">
-      <header class="topbar">
+    <div class="interface" id="interface" data-source="camera">
+      <header class="topbar" id="topbar" data-workout="idle">
         <div class="brand" aria-label="Motion, анализ движения">
           <span class="brand-mark" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none">
@@ -38,9 +38,17 @@
           </span>
         </div>
 
-        <div class="status" id="status" data-state="idle" role="status" aria-live="polite">
-          <span class="status-dot" aria-hidden="true"></span>
-          <span id="status-text">Камера выключена</span>
+        <div class="topbar-actions">
+          <div class="status" id="status" data-state="idle" role="status" aria-live="polite">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="status-text">Камера выключена</span>
+          </div>
+          <button class="finish-workout" id="finish-workout" type="button" aria-label="Завершить упражнение" hidden>
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/>
+            </svg>
+            <span class="finish-copy"><span>Завершить</span> <span>упражнение</span></span>
+          </button>
         </div>
       </header>
 
@@ -71,8 +79,15 @@
         <section class="squat-panel" id="squat-panel" aria-label="Анализ приседаний" hidden>
           <div class="hud-scoreboard">
             <div class="hud-counter">
-              <output id="rep-count" aria-labelledby="rep-count-label" aria-live="polite">0</output>
+              <div class="hud-count-line" id="rep-count-line">
+                <output id="rep-count" aria-labelledby="rep-count-label" aria-live="polite">0</output>
+                <span class="hud-count-target" id="rep-target" hidden></span>
+              </div>
               <span id="rep-count-label">ПОВТОРОВ</span>
+              <div class="hud-progress" id="rep-progress" role="progressbar" aria-label="Прогресс подхода"
+                aria-valuemin="0" aria-valuemax="10" aria-valuenow="0" hidden>
+                <span class="hud-progress-fill" id="rep-progress-fill"></span>
+              </div>
             </div>
             <span class="hud-divider" aria-hidden="true"></span>
             <div class="hud-phase-group">
@@ -183,5 +198,66 @@
       </footer>
     </div>
   </main>
+
+  <!-- Настройка показывается до запроса камеры или запуска выбранного файла. -->
+  <dialog class="workout-dialog setup-dialog" id="workout-setup" aria-labelledby="setup-title" aria-describedby="setup-description">
+    <form class="workout-form" id="workout-form" novalidate>
+      <div class="dialog-topline">
+        <span class="dialog-eyebrow"><span aria-hidden="true"></span> НОВЫЙ ПОДХОД</span>
+        <button class="dialog-close" id="cancel-setup" type="button" aria-label="Отменить настройку">×</button>
+      </div>
+      <div class="setup-body">
+        <div class="setup-intro">
+          <h2 id="setup-title">Поставьте <em>цель.</em></h2>
+          <p id="setup-description">Сколько приседаний планируете выполнить?</p>
+          <p class="setup-source" id="setup-source">Источник: живая камера</p>
+        </div>
+        <div class="setup-choices">
+          <fieldset class="goal-fieldset">
+            <legend>ПОВТОРЕНИЯ</legend>
+            <div class="goal-presets" role="group" aria-label="Быстрый выбор цели">
+              <button class="goal-option" type="button" data-goal="5" aria-pressed="false">5</button>
+              <button class="goal-option" type="button" data-goal="10" aria-pressed="true">10</button>
+              <button class="goal-option" type="button" data-goal="15" aria-pressed="false">15</button>
+              <button class="goal-option" type="button" data-goal="20" aria-pressed="false">20</button>
+            </div>
+          </fieldset>
+          <label class="custom-goal" for="custom-goal">
+            <span>СВОЁ ЗНАЧЕНИЕ</span>
+            <input id="custom-goal" type="number" min="1" step="1" inputmode="numeric" placeholder="Введите число" aria-describedby="goal-error">
+          </label>
+          <p class="goal-error" id="goal-error" role="alert" hidden>Введите целое число больше нуля.</p>
+          <button class="goal-free" id="free-goal" type="button" aria-pressed="false">
+            <span class="free-icon" aria-hidden="true">∞</span>
+            <span><strong>Свободный режим</strong><small>Без ограничения повторений</small></span>
+            <span class="goal-check" aria-hidden="true">✓</span>
+          </button>
+        </div>
+      </div>
+      <button class="start-workout" id="start-workout" type="submit">
+        <span>Начать подход</span><span aria-hidden="true">↗</span>
+      </button>
+      <p class="dialog-footnote">Цель можно изменить перед следующим подходом.</p>
+    </form>
+  </dialog>
+
+  <!-- Компактные итоги; showWorkoutResults можно расширить на следующем шаге. -->
+  <dialog class="workout-dialog results-dialog" id="workout-results" aria-labelledby="results-title" aria-describedby="results-message">
+    <div class="results-content">
+      <div class="dialog-topline">
+        <span class="dialog-eyebrow"><span aria-hidden="true"></span> ПОДХОД ЗАВЕРШЁН</span>
+        <button class="dialog-close" id="close-results" type="button" aria-label="Закрыть итоги">×</button>
+      </div>
+      <div class="results-mark" aria-hidden="true">✓</div>
+      <h2 id="results-title">Отличная работа!</h2>
+      <p id="results-message">Ваш подход завершён.</p>
+      <div class="results-stats">
+        <div><span>ПОВТОРЫ</span><strong id="results-reps">0</strong><small id="results-goal">Свободный режим</small></div>
+        <div><span>ВРЕМЯ ПОДХОДА</span><strong id="results-duration">00:00</strong><small>с момента старта</small></div>
+      </div>
+      <button class="start-workout" id="new-workout" type="button"><span>Новый подход</span><span aria-hidden="true">↗</span></button>
+      <button class="results-dismiss" id="dismiss-results" type="button">На главный экран</button>
+    </div>
+  </dialog>
 </body>
 </html>

@@ -34,6 +34,7 @@ function element(id) {
     elements.set(id, {
       textContent: '',
       dataset: {},
+      style: {},
       width: 640,
       height: 640,
       classList: { toggle() {}, contains() { return false; } },
@@ -41,20 +42,23 @@ function element(id) {
       getContext() { return context; },
       getBoundingClientRect() { return { width: 640, height: 640 }; },
       setAttribute() {},
+      getAttribute() { return null; },
       toggleAttribute() {}
     });
   }
   return elements.get(id);
 }
-globalThis.document = { getElementById: element };
+globalThis.document = { getElementById: element, querySelectorAll: () => [] };
 globalThis.window = { addEventListener() {} };
 const appSource = (await readFile(new URL('../app.js', import.meta.url), 'utf8'))
   .replace("'./geometry.js'", `'${geometryUrl}'`)
   .replace("'./analyzer.js'", `'${analyzerUrl}'`)
   + '\nexport { chooseAdvice, updateAdvice, resetAdvice, drawPose, squatAnalyzer };'
-  + '\nexport function setConnectionsForTest(value) { poseConnections = value; }\n';
+  + '\nexport function setConnectionsForTest(value) { poseConnections = value; }'
+  + '\nexport function activateWorkoutForTest() { workout.active = true; workout.goal = null; }\n';
 const appUrl = `data:text/javascript;base64,${Buffer.from(appSource).toString('base64')}`;
-const { chooseAdvice, updateAdvice, resetAdvice, drawPose, squatAnalyzer, setConnectionsForTest } = await import(appUrl);
+const { chooseAdvice, updateAdvice, resetAdvice, drawPose, squatAnalyzer, setConnectionsForTest, activateWorkoutForTest } = await import(appUrl);
+activateWorkoutForTest();
 
 afterImportCleanup();
 function afterImportCleanup() {
