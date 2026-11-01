@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { trackWorkout, assertAllRecommendations } from './helpers/workoutAnalytics.mjs';
 
 const geometrySource = await readFile(new URL('../geometry.js', import.meta.url));
 const geometryUrl = `data:text/javascript;base64,${geometrySource.toString('base64')}`;
@@ -604,4 +605,20 @@ test('некорректные размеры и временной порог �
   for (const [width, height] of [[0, 1], [1, -1], [NaN, 1], [1, Infinity]]) {
     assert.throws(() => analyzer({ videoWidth: width, videoHeight: height }), TypeError);
   }
+});
+
+// Интеграция итогов с настоящим автоматом, не с подменёнными фазами.
+test('аналитика: завершённые повторы и попытки jumpingJacks', () => {
+  const exercise = analyzer();
+  const stats = trackWorkout(exercise, 'jumpingJacks');
+  fullRep(exercise, 0);
+  feed(exercise, {}, 1100);
+  feed(exercise, { arms: 'open', feetRatio: 1.4 }, 1500);
+  feed(exercise, {}, 2000);
+  const result = stats.snapshot(4000, exercise.repCount);
+  assert.equal(exercise.repCount, 1);
+  assert.equal(result.cleanReps, 1);
+  assert.equal(result.scorePercent, 100);
+  assert.equal(result.errors.find((item) => item.name === ERROR.NARROW_LEGS)?.count, 1);
+  assertAllRecommendations('jumpingJacks', ERROR);
 });

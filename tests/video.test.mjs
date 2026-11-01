@@ -4,7 +4,7 @@ import test from 'node:test';
 import { browserModuleUrls } from './helpers/moduleLoader.mjs';
 
 // Тестируем настоящий app.js с небольшим DOM-двойником, без камеры, CDN и сборки.
-const { geometryUrl, analyzerUrl, factoryUrl } = await browserModuleUrls();
+const { geometryUrl, analyzerUrl, factoryUrl, analyticsUrl } = await browserModuleUrls();
 
 class Element extends EventTarget {
   constructor(id) {
@@ -20,6 +20,7 @@ class Element extends EventTarget {
     this.width = 640;
     this.height = 480;
     this.attributes = new Map();
+    this.children = [];
     const classes = new Set();
     this.classList = {
       toggle(name, force) {
@@ -48,8 +49,10 @@ class Element extends EventTarget {
       measureText: (text) => ({ width: text.length * 8 })
     };
   }
+  append(...children) { this.children.push(...children); }
+  replaceChildren(...children) { this.children = [...children]; }
   getBoundingClientRect() { return { width: 320, height: 240 }; }
-  focus() { this.dispatchEvent(new Event('focus')); }
+  focus() { globalThis.document.activeElement = this; this.dispatchEvent(new Event('focus')); }
   showModal() { this.open = true; }
   close() { this.open = false; this.dispatchEvent(new Event('close')); }
   click() { this.dispatchEvent(new Event('click')); }
@@ -126,7 +129,20 @@ const goalOptions = [5, 10, 15, 20].map((value) => {
   button.dataset.goal = String(value);
   return button;
 });
-globalThis.document = { getElementById: element, querySelectorAll: () => goalOptions };
+const exerciseIds = ['squat', 'plank', 'sidePlank', 'bicepCurl', 'lunge', 'overheadPress',
+  'deadlift', 'jumpingJacks', 'gluteBridge', 'pullup'];
+const exerciseCards = exerciseIds.map((id) => {
+  const button = new Element(`exercise-${id}`);
+  button.dataset.exercise = id;
+  return button;
+});
+globalThis.document = {
+  activeElement: null,
+  getElementById: element,
+  createElement: (tag) => new Element(tag),
+  querySelectorAll: (selector) => selector === '.goal-option' ? goalOptions
+    : selector === '.exercise-card' ? exerciseCards : []
+};
 globalThis.window = new EventTarget();
 globalThis.HTMLMediaElement = { HAVE_CURRENT_DATA: 2 };
 globalThis.requestAnimationFrame = (callback) => {
@@ -140,17 +156,18 @@ const appSource = (await readFile(new URL('../app.js', import.meta.url), 'utf8')
   .replace("'./geometry.js'", `'${geometryUrl}'`)
   .replace("'./analyzer.js'", `'${analyzerUrl}'`)
   .replace("'./exerciseFactory.js'", `'${factoryUrl}'`)
+  .replace("'./workoutAnalytics.js'", `'${analyticsUrl}'`)
   + `\nexport { formatVideoTime, loadVideoFile, stopCamera, disposePoseLandmarker, currentAnalyzer as squatAnalyzer, currentAnalyzer, currentExerciseId, selectExercise, processPoseFrame, workout, updateWorkoutHUD, finishWorkout };
 export function setModelForTest(model) { poseLandmarker = model; poseConnections = []; }
 export function activateWorkoutForTest(goal = null) {
   workout.active = true; workout.goal = goal; workout.startedAt = performance.now();
-  workout.lastResult = null; setWorkoutInterface(true);
+  workout.lastResult = null; workoutAnalytics = new WorkoutAnalytics(currentExerciseId, currentExercise.mode); setWorkoutInterface(true);
 }
 export function resetWorkoutForTest() {
   workout.active = false; workout.goal = null; workout.startedAt = 0; workout.lastResult = null;
   pendingSource = null; lastSource = { mode: 'camera' }; audioContext = null;
   selectExercise('squat');
-  closeDialog(setupDialog); closeDialog(resultsDialog); setWorkoutInterface(false);
+  closeExerciseSheet(false); closeDialog(setupDialog); closeDialog(resultsDialog); setWorkoutInterface(false);
 }
 export function holdModelForTest(pending) {
   poseLandmarker = null;
@@ -535,10 +552,13 @@ test('настройка открывается до камеры; ручное 
   clock = 6500;
   element('finish-workout').click();
   assert.equal(app.workout.active, false);
-  assert.deepEqual(app.workout.lastResult, { reason: 'manual', exerciseId: 'squat', mode: 'reps', repCount: 3, activeHoldTime: null, goal: 5, durationMs: 6400 });
+  const { analytics, ...basicResult } = app.workout.lastResult;
+  assert.deepEqual(basicResult, { reason: 'manual', exerciseId: 'squat', mode: 'reps', repCount: 3, activeHoldTime: null, goal: 5, durationMs: 6400 });
+  assert.equal(analytics.cleanReps + analytics.flaggedReps + analytics.unknownReps, 3);
+  assert.ok(Object.isFrozen(analytics) && Object.isFrozen(analytics.errors));
   assert.equal(element('workout-results').open, true);
   assert.equal(element('results-reps').textContent, '3');
-  assert.equal(element('results-goal').textContent, 'Цель: 5');
+  assert.equal(element('results-goal').textContent, 'из 5');
   assert.equal(element('results-duration').textContent, '00:06');
   assert.equal(streams[0].track.readyState, 'ended');
   assert.equal(rafs.size, 0);
@@ -604,7 +624,9 @@ test('цель завершает подход на нужном повторе:
   assert.equal(app.workout.lastResult.reason, 'goal');
   assert.equal(app.workout.lastResult.repCount, 1);
   assert.equal(app.workout.lastResult.goal, 1);
-  assert.equal(element('results-title').textContent, 'Цель достигнута!');
+  assert.equal(app.workout.lastResult.analytics.cleanReps, 1);
+  assert.equal(app.workout.lastResult.analytics.scorePercent, 100, 'последний кадр учтён до завершения по цели');
+  assert.equal(element('results-status').textContent, 'ЦЕЛЬ ДОСТИГНУТА');
   assert.equal(element('results-reps').textContent, '1');
   assert.equal(element('workout-results').open, true);
   assert.equal(stream.track.readyState, 'ended');
@@ -637,7 +659,7 @@ test('свободный режим не завершает подход по к
   element('finish-workout').click();
   assert.equal(app.workout.lastResult.repCount, 2);
   assert.equal(app.workout.lastResult.goal, null);
-  assert.equal(element('results-goal').textContent, 'Свободный режим');
+  assert.equal(element('results-goal').textContent, 'без цели');
   assert.equal(audio.starts, 0);
 });
 
@@ -810,12 +832,18 @@ test('настройку и итоги можно закрыть без подд
   beginIdleTest();
   const setup = element('workout-setup');
   const results = element('workout-results');
-  const methods = [setup.showModal, setup.close, results.showModal, results.close];
-  setup.showModal = setup.close = results.showModal = results.close = undefined;
+  const sheet = element('exercise-sheet');
+  const methods = [setup.showModal, setup.close, results.showModal, results.close, sheet.showModal, sheet.close];
+  setup.showModal = setup.close = results.showModal = results.close = sheet.showModal = sheet.close = undefined;
   try {
     navigator.mediaDevices.getUserMedia = async () => makeStream();
     element('toggle-camera').click();
     assert.equal(setup.getAttribute('open'), '');
+    element('exercise-select').click();
+    assert.equal(sheet.getAttribute('open'), '');
+    element('exercise-sheet-done').click();
+    assert.equal(sheet.getAttribute('open'), null);
+    assert.equal(document.activeElement, element('exercise-select'));
     element('cancel-setup').click();
     assert.equal(setup.getAttribute('open'), null);
     element('toggle-camera').click();
@@ -827,7 +855,7 @@ test('настройку и итоги можно закрыть без подд
     element('close-results').click();
     assert.equal(results.getAttribute('open'), null);
   } finally {
-    [setup.showModal, setup.close, results.showModal, results.close] = methods;
+    [setup.showModal, setup.close, results.showModal, results.close, sheet.showModal, sheet.close] = methods;
   }
 });
 
@@ -974,8 +1002,12 @@ function validSidePlankPose() {
 }
 const holdPoses = { plank: validPlankPose, sidePlank: validSidePlankPose };
 function chooseExercise(id) {
-  element('exercise-select').value = id;
-  element('exercise-select').dispatchEvent(new Event('change'));
+  const card = exerciseCards.find((button) => button.dataset.exercise === id);
+  assert.ok(card, `Неизвестная карточка ${id}`);
+  if (!app.workout.active) element('exercise-select').click();
+  // Искусственное событие позволяет проверить защиту даже у отключённой кнопки.
+  card.dispatchEvent(new Event('click'));
+  if (!app.workout.active) element('exercise-sheet-done').click();
 }
 function nearSeconds(actual, expected) {
   assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`);
@@ -1007,10 +1039,10 @@ test('селектор создаёт новый автомат, меняет е
   await wait(0);
   const activeAnalyzer = app.currentAnalyzer;
   assert.equal(element('exercise-select').disabled, true);
-  chooseExercise('lunge'); // даже искусственный change не меняет текущий подход
+  chooseExercise('lunge'); // даже искусственный click не меняет текущий подход
   assert.equal(app.currentExerciseId, 'sidePlank');
   assert.equal(app.currentAnalyzer, activeAnalyzer);
-  assert.equal(element('exercise-select').value, 'sidePlank');
+  assert.equal(element('exercise-select').dataset.exercise, 'sidePlank');
   app.finishWorkout('manual');
   assert.equal(element('exercise-select').disabled, false);
   element('new-workout').click();
@@ -1020,6 +1052,100 @@ test('селектор создаёт новый автомат, меняет е
   assert.equal(element('goal-unit').textContent, 'ПОВТОРЕНИЯ');
   assert.deepEqual(goalOptions.map((button) => Number(button.dataset.goal)), [5, 10, 15, 20]);
   assert.equal(element('squat-view-control').hidden, false);
+});
+
+test('радиокарточки обновляют данные, управляются стрелками и возвращают фокус после Escape', () => {
+  beginIdleTest();
+  element('toggle-camera').click();
+  const trigger = element('exercise-select');
+  const sheet = element('exercise-sheet');
+  const key = (card, name) => {
+    const event = new Event('keydown', { cancelable: true });
+    Object.defineProperty(event, 'key', { value: name });
+    card.dispatchEvent(event);
+    return event;
+  };
+  trigger.click();
+  assert.equal(sheet.open, true);
+  assert.equal(trigger.getAttribute('aria-expanded'), 'true');
+  assert.equal(document.activeElement, exerciseCards[0]);
+  assert.equal(exerciseCards[0].getAttribute('aria-checked'), 'true');
+  assert.equal(exerciseCards[0].tabIndex, 0);
+  assert.ok(exerciseCards.slice(1).every((card) => card.tabIndex === -1));
+
+  assert.equal(key(exerciseCards[0], 'ArrowDown').defaultPrevented, true);
+  assert.equal(app.currentExerciseId, 'plank');
+  assert.equal(document.activeElement, exerciseCards[1]);
+  assert.equal(exerciseCards[1].getAttribute('aria-checked'), 'true');
+  assert.equal(exerciseCards[0].getAttribute('aria-checked'), 'false');
+  assert.equal(element('exercise-selected-name').textContent, 'Планка');
+  assert.equal(element('exercise-selected-muscle').textContent, 'Кор');
+  assert.equal(element('exercise-selected-mode').textContent, 'Таймер');
+  assert.equal(element('exercise-selected-icon').getAttribute('href'), '#exercise-icon-plank');
+  assert.equal(element('exercise-position').textContent, '02 / 10');
+  assert.equal(element('exercise-sheet-selection').textContent, 'Планка');
+  assert.match(element('exercise-hint').textContent, /сбоку/i);
+  assert.equal(element('goal-unit').textContent, 'СЕКУНДЫ');
+
+  key(exerciseCards[1], 'End');
+  assert.equal(app.currentExerciseId, 'pullup');
+  assert.equal(document.activeElement, exerciseCards[9]);
+  key(exerciseCards[9], 'ArrowRight');
+  assert.equal(app.currentExerciseId, 'squat');
+  key(exerciseCards[0], 'ArrowLeft');
+  assert.equal(app.currentExerciseId, 'pullup');
+  key(exerciseCards[9], 'Home');
+  assert.equal(app.currentExerciseId, 'squat');
+
+  const cancel = new Event('cancel', { cancelable: true });
+  sheet.dispatchEvent(cancel);
+  assert.equal(cancel.defaultPrevented, true);
+  assert.equal(sheet.open, false);
+  assert.equal(element('workout-setup').open, true);
+  assert.equal(trigger.getAttribute('aria-expanded'), 'false');
+  assert.equal(document.activeElement, trigger);
+  element('cancel-setup').click();
+});
+
+test('повторный выбор сохраняет экземпляр анализатора и пользовательскую цель', async () => {
+  beginIdleTest();
+  navigator.mediaDevices.getUserMedia = async () => makeStream();
+  element('toggle-camera').click();
+  chooseExercise('plank');
+  const analyzer = app.currentAnalyzer;
+  selectCustom('17');
+  chooseExercise('plank');
+  assert.equal(app.currentAnalyzer, analyzer);
+  assert.equal(element('custom-goal').value, '17');
+  submitWorkout();
+  await wait(0);
+  assert.equal(app.workout.goal, 17);
+  assert.equal(app.workout.active, true);
+  assert.ok(exerciseCards.every((card) => card.disabled));
+  app.finishWorkout('manual');
+  assert.ok(exerciseCards.every((card) => !card.disabled));
+});
+
+test('фон, закрытие настройки и pagehide не оставляют открытый каталог', () => {
+  beginIdleTest();
+  element('toggle-camera').click();
+  const trigger = element('exercise-select');
+  const sheet = element('exercise-sheet');
+  trigger.click();
+  sheet.click(); // событие фона имеет target === dialog
+  assert.equal(sheet.open, false);
+  assert.equal(document.activeElement, trigger);
+  assert.equal(element('workout-setup').open, true);
+  trigger.click();
+  element('workout-setup').close();
+  assert.equal(sheet.open, false);
+  assert.equal(trigger.getAttribute('aria-expanded'), 'false');
+  element('toggle-camera').click();
+  trigger.click();
+  window.dispatchEvent(new Event('pagehide'));
+  assert.equal(sheet.open, false);
+  assert.equal(element('workout-setup').open, false);
+  assert.equal(trigger.getAttribute('aria-expanded'), 'false');
 });
 
 for (const [id, pose] of Object.entries(holdPoses)) {
@@ -1084,7 +1210,15 @@ for (const [id, pose] of Object.entries(holdPoses)) {
     assert.equal(result.repCount, null);
     assert.equal(element('results-metric-label').textContent, 'УДЕРЖАНИЕ, СЕК');
     assert.equal(element('results-reps').textContent, '3');
-    assert.equal(element('results-goal').textContent, 'Свободный режим');
+    assert.equal(element('results-goal').textContent, 'без цели');
+    assert.equal(result.analytics.confirmedWallMs, 700, 'сумма подтверждённых интервалов реального времени');
+    assert.ok(result.analytics.holdRatioPercent > 0 && result.analytics.holdRatioPercent < 2);
+    assert.equal(result.analytics.scorePercent, null);
+    assert.equal(element('results-score-value').textContent, '—');
+    assert.equal(element('results-clean').textContent, '—');
+    assert.equal(element('results-tempo').textContent, '—');
+    assert.equal(element('results-hold').hidden, false);
+    assert.equal(element('results-hold-progress').getAttribute('aria-valuenow'), String(result.analytics.holdRatioPercent));
   });
 
   test(`${id}: живая камера использует секунды из монотонных часов и сохраняет удержание при смене источника`, async () => {
@@ -1132,7 +1266,7 @@ for (const [id, pose] of Object.entries(holdPoses)) {
     nearSeconds(app.workout.lastResult.activeHoldTime, 1);
     assert.equal(app.workout.lastResult.reason, 'goal');
     assert.equal(element('results-reps').textContent, '1');
-    assert.equal(element('results-goal').textContent, 'Цель: 1 с');
+    assert.equal(element('results-goal').textContent, 'из 1 с');
     assert.equal(stream.track.readyState, 'ended');
     assert.equal(audio.starts, 1);
     nextFrame();
@@ -1379,3 +1513,81 @@ for (const [id, pose] of Object.entries(holdPoses)) {
     nearSeconds(app.currentAnalyzer.activeHoldTime, 0.2);
   });
 }
+
+
+test('последний кадр достижения цели сохраняет замечание в итоговой статистике', async () => {
+  beginIdleTest();
+  navigator.mediaDevices.getUserMedia = async () => makeStream();
+  element('toggle-camera').click();
+  selectCustom('1');
+  submitWorkout();
+  await wait(0);
+  for (const angle of [175, 130, 110, 114, 140, 175]) {
+    testPose = poseAtAngle(angle);
+    video.currentTime += 0.1;
+    clock += 100;
+    nextFrame();
+  }
+  const result = app.workout.lastResult;
+  assert.equal(result.reason, 'goal');
+  assert.equal(result.analytics.flaggedReps, 1);
+  assert.equal(result.analytics.scorePercent, 0);
+  assert.equal(result.analytics.errors[0].name, 'Недостаточная глубина приседания');
+  assert.equal(result.analytics.errors[0].count, 1);
+  assert.equal(element('results-grade').textContent, 'Много замечаний');
+  assert.equal(element('results-error-list').children.length, 1);
+});
+
+test('повтор из файла сразу запрашивает камеру, сохраняет упражнение и цель и сбрасывает статистику', async () => {
+  beginIdleTest();
+  let requests = 0;
+  navigator.mediaDevices.getUserMedia = async () => { requests += 1; return makeStream(); };
+  element('videoFileInput').files = [{ name: 'hold.webm' }];
+  element('videoFileInput').dispatchEvent(new Event('change'));
+  chooseExercise('plank');
+  selectCustom('17');
+  submitWorkout();
+  video.dispatchEvent(new Event('loadeddata'));
+  await wait(0);
+  assert.equal(requests, 0);
+  const previous = app.finishWorkout('manual');
+  assert.equal(previous.exerciseId, 'plank');
+  assert.equal(previous.goal, 17);
+  assert.equal(previous.analytics.holdRatioPercent, null);
+  assert.equal(element('results-hold-ratio').textContent, '—');
+  assert.equal(element('results-hold-progress').getAttribute('aria-valuenow'), null);
+  assert.equal(element('results-grade').textContent, 'Оценка недоступна');
+  assert.equal(Object.isFrozen(previous.analytics), true);
+  assert.deepEqual(revoked, created);
+  element('repeat-workout').click();
+  await wait(0);
+  assert.equal(requests, 1);
+  assert.equal(app.workout.active, true);
+  assert.equal(app.currentExerciseId, 'plank');
+  assert.equal(app.workout.goal, 17);
+  assert.equal(app.workout.lastResult, null);
+  assert.equal(app.currentAnalyzer.activeHoldTime, 0);
+  assert.equal(app.inspectForTest().sourceMode, 'camera');
+  assert.equal(element('workout-setup').open, false);
+  assert.equal(element('workout-results').open, false);
+  assert.equal(previous.activeHoldTime, 0, 'завершённый снимок не изменяется после нового старта');
+});
+
+test('повтор свободного режима не подставляет цель по умолчанию', async () => {
+  beginIdleTest();
+  navigator.mediaDevices.getUserMedia = async () => makeStream();
+  element('toggle-camera').click();
+  element('free-goal').click();
+  submitWorkout();
+  await wait(0);
+  feedExercise();
+  const previous = app.finishWorkout('manual');
+  assert.equal(previous.goal, null);
+  assert.equal(previous.repCount, 1);
+  element('repeat-workout').click();
+  await wait(0);
+  assert.equal(app.workout.goal, null);
+  assert.equal(app.squatAnalyzer.repCount, 0);
+  assert.equal(element('rep-target').textContent, '∞');
+  assert.equal(previous.analytics.cleanReps, 1);
+});

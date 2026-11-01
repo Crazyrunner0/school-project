@@ -162,6 +162,10 @@ export class PullUpAnalyzer {
       throw new TypeError('maxFrameGapMs должен быть положительным числом миллисекунд.');
     }
     this.repCount = 0;
+    // Отдельный снимок завершённой попытки нужен итоговой статистике:
+    // текущий кадр может одновременно начать уже следующую попытку.
+    this.summaryAttemptSequence = 0;
+    this.summaryAttempt = null;
     this.frameWidth = 1;
     this.frameHeight = 1;
     this.maxFrameGapMs = maxFrameGapMs;
@@ -190,6 +194,8 @@ export class PullUpAnalyzer {
 
   reset() {
     this.repCount = 0;
+    this.summaryAttemptSequence = 0;
+    this.summaryAttempt = null;
     this.resetTracking();
   }
 
@@ -269,6 +275,11 @@ export class PullUpAnalyzer {
     const counted = enoughMovement && attempt.peakConfirmed && attempt.startHang
       && attempt.reachedTop && pose.hang;
     if (counted) this.repCount += 1;
+    this.summaryAttempt = Object.freeze({
+      sequence: ++this.summaryAttemptSequence,
+      counted,
+      errors: Object.freeze([...new Set(errors)])
+    });
 
     const notes = [counted ? 'Повтор засчитан.' : 'Повтор не засчитан.'];
     for (const error of errors) notes.push(errorMessage(error));

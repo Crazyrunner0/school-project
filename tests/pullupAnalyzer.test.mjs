@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { trackWorkout, assertAllRecommendations } from './helpers/workoutAnalytics.mjs';
 
 const geometrySource = await readFile(new URL('../geometry.js', import.meta.url));
 const geometryUrl = `data:text/javascript;base64,${geometrySource.toString('base64')}`;
@@ -578,4 +579,26 @@ test('setFrameSize валидирует размеры; reset и resetTracking �
   assert.equal(pullup.currentPhase, PHASE.WAITING);
   pullup.reset();
   assert.equal(pullup.repCount, 0);
+});
+
+// Интеграция итогов с настоящим автоматом, не с подменёнными фазами.
+test('аналитика: завершённые повторы и попытки pullup', () => {
+  const exercise = analyzer();
+  const stats = trackWorkout(exercise, 'pullup');
+  fullRep(exercise);
+  // Прежняя попытка с недотягом завершается в одном кадре с началом новой.
+  feed(exercise, 800);
+  feed(exercise, 1000, { angle: 100, shoulderY: 300 });
+  feed(exercise, 1200, { angle: 130, shoulderY: 500 });
+  const boundary = feed(exercise, 1400, { angle: 70, shoulderY: 190 });
+  assert.ok(boundary.currentErrors.includes(ERROR.SHORT_TOP));
+  assert.ok(boundary.currentErrors.includes(ERROR.SHORT_BOTTOM));
+  feed(exercise, 1600);
+  const result = stats.snapshot(4000, exercise.repCount);
+  assert.equal(exercise.repCount, 1);
+  assert.equal(result.cleanReps, 1);
+  assert.equal(result.scorePercent, 100);
+  assert.equal(result.errors.find((item) => item.name === ERROR.SHORT_TOP)?.count, 1);
+  assert.equal(result.errors.find((item) => item.name === ERROR.SHORT_BOTTOM)?.count, 1);
+  assertAllRecommendations('pullup', ERROR);
 });

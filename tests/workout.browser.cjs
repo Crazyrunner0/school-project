@@ -111,8 +111,8 @@ const server = http.createServer((req, res) => {
     await page.goto(address);
     const open = (selector) => page.waitForSelector(`${selector}[open]`);
     const tracking = () => page.waitForFunction(() => document.querySelector('#tracking-status').textContent === 'АНАЛИЗ АКТИВЕН');
-    async function feedExercise() {
-      for (const angle of [175, 130, 90, 94, 120, 175]) {
+    async function feedExercise(angles = [175, 130, 90, 94, 120, 175]) {
+      for (const angle of angles) {
         const oldCount = await page.evaluate((value) => window.__setAngle(value), angle);
         await page.waitForFunction((previous) => window.__detections > previous, oldCount, { timeout: 5000 });
       }
@@ -132,6 +132,14 @@ const server = http.createServer((req, res) => {
       assert.ok(data.x >= 0 && data.y >= 0 && data.right <= bounds.width && data.bottom <= bounds.height,
         `${selector} outside ${bounds.width}x${bounds.height}: ${JSON.stringify(data)}`);
       assert.ok(data.hit, `${selector} is covered: ${JSON.stringify(data)}`);
+    }
+    async function backToSetup() {
+      const requests = await page.evaluate(() => window.__cameraRequests);
+      await page.click('#new-workout');
+      await open('#workout-setup');
+      await open('#exercise-sheet');
+      assert.equal(await page.evaluate(() => window.__cameraRequests), requests, 'переход к выбору не запускает камеру');
+      await page.click('#exercise-sheet-done');
     }
     const noOverlap = (a, b) => a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
     async function activeLayout(bounds) {
@@ -183,10 +191,13 @@ const server = http.createServer((req, res) => {
     await page.click('#finish-workout');
     await open('#workout-results');
     assert.equal(await page.locator('#results-reps').textContent(), '0');
-    assert.equal(await page.locator('#results-goal').textContent(), 'Цель: 15');
+    assert.equal(await page.locator('#results-goal').textContent(), 'из 15');
+    assert.equal(await page.locator('#results-score-value').textContent(), '—');
+    assert.equal(await page.locator('#results-grade').textContent(), 'Недостаточно данных');
+    assert.match(await page.locator('#results-error-state').textContent(), /Завершённых повторов пока нет/);
+    assert.notEqual(await page.locator('#results-coach').textContent(), '');
     assert.equal(await page.locator('#camera').getAttribute('src'), null);
-    await page.click('#new-workout');
-    await open('#workout-setup');
+    await backToSetup();
     assert.match(await page.locator('#setup-source').textContent(), /short\.webm/);
     await page.click('#cancel-setup');
 
@@ -202,27 +213,64 @@ const server = http.createServer((req, res) => {
     await page.setViewportSize(screens[0]);
     await feedExercise();
     await open('#workout-results');
-    assert.equal(await page.locator('#results-title').textContent(), 'Цель достигнута!');
+    assert.equal(await page.locator('#results-status').textContent(), 'ЦЕЛЬ ДОСТИГНУТА');
     assert.equal(await page.locator('#results-reps').textContent(), '1');
-    assert.equal(await page.locator('#results-goal').textContent(), 'Цель: 1');
+    assert.equal(await page.locator('#results-goal').textContent(), 'из 1');
     assert.equal(await page.evaluate(() => window.__audioStarts), 1);
     assert.equal(await page.evaluate(() => window.__streams[0].getVideoTracks()[0].readyState), 'ended');
     const lastFrame = await page.evaluate(() => window.__detections);
     await page.waitForTimeout(350);
     assert.equal(await page.evaluate(() => window.__detections), lastFrame);
-    for (const screen of screens) { await page.setViewportSize(screen); await visible('#new-workout', screen); }
+    assert.equal(await page.locator('#results-score-value').textContent(), '100');
+    assert.equal(await page.locator('#results-grade').textContent(), 'Отличная форма');
+    assert.equal(await page.locator('#results-clean').textContent(), '1 / 1');
+    assert.match(await page.locator('#results-score-ring').getAttribute('aria-label'), /100.*1 из 1/);
+    for (const screen of screens) {
+      await page.setViewportSize(screen);
+      await visible('#close-results', screen);
+      await visible('#new-workout', screen);
+      await visible('#repeat-workout', screen);
+      const layout = await page.evaluate(() => {
+        const dialog = document.querySelector('#workout-results');
+        const content = document.querySelector('#summary-scroll');
+        const footer = document.querySelector('.summary-actions').getBoundingClientRect();
+        const buttons = Array.from(document.querySelectorAll('.summary-actions button'), (b) => b.getBoundingClientRect());
+        return { width: content.clientWidth, scrollWidth: content.scrollWidth, height: content.clientHeight,
+          scrollHeight: content.scrollHeight, footerTop: footer.top, buttons: buttons.map(({top,bottom,left,right}) => ({top,bottom,left,right})),
+          backdropOpen: dialog.open };
+      });
+      assert.ok(layout.backdropOpen && layout.width >= layout.scrollWidth && layout.height > 50 && layout.scrollHeight > layout.height,
+        `Итоги не прокручиваются или выходят за экран ${JSON.stringify(screen)}: ${JSON.stringify(layout)}`);
+      assert.ok(noOverlap(layout.buttons[0], layout.buttons[1]), 'кнопки итогов не должны перекрываться');
+      await page.locator('#summary-scroll').evaluate((node) => { node.scrollTop = node.scrollHeight; });
+      assert.ok(await page.locator('#summary-scroll').evaluate((node) => node.scrollTop > 0));
+      const limits = await page.locator('.summary-disclaimer').boundingBox();
+      assert.ok(limits.y + limits.height <= layout.footerTop + 1, 'ограничения видны над закреплёнными действиями');
+    }
     await page.setViewportSize(screens[0]);
 
+    // Повтор сразу возвращает камеру, оставляя упражнение и цель, но не статистику.
+    await page.click('#repeat-workout');
+    await tracking();
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'finish-workout');
+    assert.equal(await page.evaluate(() => window.__cameraRequests), 2);
+    assert.equal(await page.locator('#rep-count').textContent(), '0');
+    assert.equal(await page.locator('#rep-target').textContent(), '/ 1');
+    assert.equal(await page.locator('#active-exercise').textContent(), 'ПРИСЕДАНИЯ');
+    await feedExercise();
+    await open('#workout-results');
+    assert.equal(await page.locator('#results-reps').textContent(), '1');
+    assert.equal(await page.evaluate(() => window.__audioStarts), 2);
+
     // Start afresh in free mode; switching sources preserves completed reps.
-    await page.click('#new-workout');
-    await open('#workout-setup');
+    await backToSetup();
     await page.click('#free-goal');
     await page.click('#start-workout');
     await tracking();
     assert.equal(await page.locator('#rep-count').textContent(), '0');
     assert.equal(await page.locator('#rep-target').textContent(), '∞');
     assert.equal(await page.locator('#rep-progress').isHidden(), true);
-    await feedExercise();
+    await feedExercise([175, 130, 110, 114, 140, 175]);
     await feedExercise();
     await page.waitForFunction(() => document.querySelector('#rep-count').textContent === '2');
     await page.locator('#videoFileInput').setInputFiles(fixture);
@@ -234,12 +282,17 @@ const server = http.createServer((req, res) => {
     assert.equal(await page.locator('#rep-count').textContent(), '2');
     await page.click('#finish-workout');
     await open('#workout-results');
-    assert.equal(await page.locator('#results-title').textContent(), 'Отличная работа!');
+    assert.equal(await page.locator('#results-status').textContent(), 'ПОДХОД ЗАВЕРШЁН');
     assert.equal(await page.locator('#results-reps').textContent(), '2');
-    assert.equal(await page.locator('#results-goal').textContent(), 'Свободный режим');
-    assert.equal(await page.evaluate(() => window.__audioStarts), 1, 'ручное завершение не добавляет сигнал');
+    assert.equal(await page.locator('#results-goal').textContent(), 'без цели');
+    assert.equal(await page.evaluate(() => window.__audioStarts), 2, 'ручное завершение не добавляет сигнал');
+    assert.equal(await page.locator('#results-score-value').textContent(), '50');
+    assert.equal(await page.locator('#results-grade').textContent(), 'Много замечаний');
+    assert.equal(await page.locator('#results-clean').textContent(), '1 / 2');
+    assert.match(await page.locator('#results-error-list').textContent(), /Недостаточная глубина приседания.*1 попытка/);
+    assert.match(await page.locator('#results-coach').textContent(), /комфортной амплитуде/);
 
-    await page.click('#new-workout');
+    await backToSetup();
     await page.click('#start-workout');
     await tracking();
     assert.equal(await page.locator('#rep-count').textContent(), '0');
@@ -249,7 +302,7 @@ const server = http.createServer((req, res) => {
     await open('#workout-results');
 
     // A large, valid custom number must remain complete and not collide with the HUD.
-    await page.click('#new-workout');
+    await backToSetup();
     await page.locator('#custom-goal').fill('9007199254740991');
     await page.click('#start-workout');
     await tracking();
@@ -274,6 +327,30 @@ const server = http.createServer((req, res) => {
     for (const screen of screens) { await page.setViewportSize(screen); await activeLayout(screen); }
     await page.setViewportSize(screens[0]);
     await page.click('#finish-workout');
+    await open('#workout-results');
+    assert.equal(await page.locator('#results-goal').textContent(), 'из 9007199254740991');
+    await page.setViewportSize({ width: 280, height: 568 });
+    await page.locator('#results-goal').scrollIntoViewIfNeeded();
+    const longGoal = await page.evaluate(() => {
+      const goal = document.querySelector('#results-goal').getBoundingClientRect();
+      const card = document.querySelector('#results-goal').closest('.summary-metric').getBoundingClientRect();
+      const scroll = document.querySelector('#summary-scroll');
+      return { goalLeft: goal.left, goalRight: goal.right, cardLeft: card.left, cardRight: card.right,
+        width: scroll.clientWidth, scrollWidth: scroll.scrollWidth };
+    });
+    assert.ok(longGoal.goalLeft >= longGoal.cardLeft && longGoal.goalRight <= longGoal.cardRight
+      && longGoal.scrollWidth <= longGoal.width, `длинная цель не помещается: ${JSON.stringify(longGoal)}`);
+    await page.setViewportSize(screens[0]);
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'close-results');
+    await page.keyboard.press('Tab');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'summary-scroll');
+    await page.keyboard.press('Tab');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'repeat-workout');
+    await page.keyboard.press('Tab');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'new-workout');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#workout-results').isVisible(), false);
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'toggle-camera');
     assert.deepEqual(errors, []);
     console.log('PASS подходы: настройка до источника, цель и Web Audio, свободный режим, итоги, смена источников и мобильная адаптация');
   } finally {
