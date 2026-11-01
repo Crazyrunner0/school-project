@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { trackWorkout, assertAllRecommendations } from './helpers/workoutAnalytics.mjs';
 
 // Тестируем браузерные ES-модули без package.json, сервера и сборки.
 const geometrySource = await readFile(new URL('../geometry.js', import.meta.url));
@@ -355,4 +356,18 @@ test('коррекция пропорций кадра и изменение р�
   assert.throws(() => analyzer.setFrameSize(0, 720), TypeError);
   assert.throws(() => analyzer.setFrameSize(NaN, 720), TypeError);
   assert.throws(() => analyzer.setView('profile'), TypeError);
+});
+
+// Ошибки приседаний накапливаются по кадрам и дедуплицируются по повторам.
+test('аналитика: приседания, временные подсказки и завершённый недосед', () => {
+  const exercise = withAnalyzer();
+  const stats = trackWorkout(exercise, 'squat');
+  for (const angle of [175, 130, 90, 94, 120, 175, 130, 110, 114, 140, 175]) feed(exercise, angle);
+  const result = stats.snapshot(4000, exercise.repCount);
+  assert.equal(exercise.repCount, 2);
+  assert.equal(result.cleanReps, 1);
+  assert.equal(result.flaggedReps, 1);
+  assert.equal(result.scorePercent, 50);
+  assert.equal(result.errors.find((item) => item.name === ERROR.SHALLOW)?.count, 1);
+  assertAllRecommendations('squat', ERROR);
 });

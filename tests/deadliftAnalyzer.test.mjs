@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { trackWorkout, assertAllRecommendations } from './helpers/workoutAnalytics.mjs';
 
 // Проверяем браузерный ES-модуль без package.json и сборки.
 const geometrySource = await readFile(new URL('../geometry.js', import.meta.url));
@@ -578,4 +579,21 @@ test('неверные настройки отклоняются', () => {
   for (const [width, height] of [[0, 1], [1, -1], [NaN, 1], [1, Infinity]]) {
     assert.throws(() => analyzer({ videoWidth: width, videoHeight: height }), TypeError);
   }
+});
+
+// Интеграция итогов с настоящим автоматом, не с подменёнными фазами.
+test('аналитика: завершённые повторы и попытки deadlift', () => {
+  const exercise = analyzer();
+  const stats = trackWorkout(exercise, 'deadlift');
+  fullRep(exercise);
+  feed(exercise); feed(exercise, { hipBack: 20 });
+  feed(exercise, { hipBack: 100, lean: 70, kneeAngle: 129 });
+  feed(exercise, { hipBack: 80, lean: 60 }); feed(exercise);
+  const result = stats.snapshot(4000, exercise.repCount);
+  assert.equal(exercise.repCount, 2);
+  assert.equal(result.cleanReps, 1);
+  assert.equal(result.flaggedReps, 1);
+  assert.equal(result.scorePercent, 50);
+  assert.equal(result.errors.find((item) => item.name === ERROR.KNEE_BEND)?.count, 1);
+  assertAllRecommendations('deadlift', ERROR);
 });

@@ -18,6 +18,42 @@
   <script type="module" src="app.js"></script>
 </head>
 <body>
+  <!-- Общие векторные пиктограммы не требуют загрузки изображений. -->
+  <svg class="exercise-symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="exercise-icon-squat" viewBox="0 0 64 64">
+      <circle cx="39" cy="10" r="4.5"/><path d="M36 16 29 26l11 5 7 10M29 26l-7 8 5 9M40 31l-5 10-9 3M47 41l7 5M27 43l-7 4M29 21l-9 3-5 7M35 18l-8 3-4 7"/><path d="M13 52h43" class="exercise-ground"/>
+    </symbol>
+    <symbol id="exercise-icon-plank" viewBox="0 0 64 64">
+      <circle cx="14" cy="23" r="4.5"/><path d="M19 24 34 27 50 29l5 10M21 25l-1 10 7 5M33 27l-3 11 7 2M50 29l-4 10"/><path d="M12 42h46" class="exercise-ground"/>
+    </symbol>
+    <symbol id="exercise-icon-sidePlank" viewBox="0 0 64 64">
+      <circle cx="21" cy="15" r="4.5"/><path d="M23 20 33 30 47 39l7 1M26 23l-7 15h-6M26 23l1-14 3-4M33 30l11 12h8"/><path d="M10 45h47" class="exercise-ground"/>
+    </symbol>
+    <symbol id="exercise-icon-bicepCurl" viewBox="0 0 64 64">
+      <circle cx="33" cy="10" r="4.5"/><path d="M31 16l-2 17 8 1 1-18M29 33l-5 14-4 5M37 34l5 14 4 4M30 20l-7 8 2 8 6-6M38 20l5 9-1 8"/><path d="M28 26l5-3M29 21l7 4"/>
+    </symbol>
+    <symbol id="exercise-icon-lunge" viewBox="0 0 64 64">
+      <circle cx="30" cy="10" r="4.5"/><path d="M29 16 27 31l8 2 1-17M27 31l-8 11-8 4M35 33l10 1 1 13 6 2M29 20l-6 10M35 20l5 8"/><path d="M8 52h48" class="exercise-ground"/>
+    </symbol>
+    <symbol id="exercise-icon-overheadPress" viewBox="0 0 64 64">
+      <path d="M10 9h44M12 5v8M52 5v8M17 6v6M47 6v6"/><circle cx="32" cy="23" r="4"/><path d="M28 18 20 12M36 18l8-6M29 29l-2 13M35 29l2 13M27 42l-4 11M37 42l4 11"/>
+    </symbol>
+    <symbol id="exercise-icon-deadlift" viewBox="0 0 64 64">
+      <circle cx="20" cy="18" r="4.5"/><path d="M24 21 39 30l4 5M39 30l-2 13 2 9M39 30l-10 10 1 12M27 24l2 11-5 10M33 27l4 10-7 8M12 48h30M14 44v8M40 44v8"/>
+    </symbol>
+    <symbol id="exercise-icon-jumpingJacks" viewBox="0 0 64 64">
+      <circle cx="32" cy="10" r="4.5"/><path d="M28 17l-2 17 6 3 6-3-2-17M28 19l-9-5-5-7M36 19l9-5 5-7M29 36 20 48l-5 4M35 36l9 12 5 4"/>
+    </symbol>
+    <symbol id="exercise-icon-gluteBridge" viewBox="0 0 64 64">
+      <circle cx="11" cy="39" r="4.5"/><path d="M16 40 29 34l9-8 9 7 3 12h6M29 34l9 4 5 7M20 38l9 6h8"/><path d="M6 49h53" class="exercise-ground"/>
+    </symbol>
+    <symbol id="exercise-icon-pullup" viewBox="0 0 64 64">
+      <path d="M8 9h48M15 6v6M49 6v6"/><circle cx="32" cy="22" r="4.5"/><path d="M27 27 20 22l-3-12M37 27l7-5 3-12M27 27l2 14 6 1 2-15M29 41l-2 11M35 42l3 10"/>
+    </symbol>
+    <symbol id="exercise-camera-icon" viewBox="0 0 24 24">
+      <rect x="3" y="6.5" width="12" height="11" rx="2.5"/><path d="m15 10 5-2.5v9L15 14z"/>
+    </symbol>
+  </svg>
   <main class="app">
     <div class="camera-view is-mirrored" id="camera-view" aria-hidden="true">
       <video id="camera" autoplay muted playsinline webkit-playsinline></video>
@@ -212,26 +248,24 @@
           <p id="setup-description">Сколько повторений планируете выполнить?</p>
           <p class="setup-source" id="setup-source">Источник: живая камера</p>
           <div class="exercise-picker">
-            <label for="exercise-select">УПРАЖНЕНИЕ</label>
-            <div class="exercise-select-wrap">
-              <span class="exercise-select-icon" aria-hidden="true">↗</span>
-              <select id="exercise-select" aria-describedby="exercise-hint">
-                <option value="squat">Приседания</option>
-                <option value="plank">Планка</option>
-                <option value="sidePlank">Боковая планка</option>
-                <option value="bicepCurl">Сгибания рук</option>
-                <option value="lunge">Выпады</option>
-                <option value="overheadPress">Жим вверх</option>
-                <option value="deadlift">Румынская тяга</option>
-                <option value="jumpingJacks">Jumping jacks</option>
-                <option value="gluteBridge">Ягодичный мостик</option>
-                <option value="pullup">Подтягивания</option>
-              </select>
-              <svg class="exercise-select-arrow" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="m7 10 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
+            <div class="exercise-picker-heading">
+              <span id="exercise-picker-label">УПРАЖНЕНИЕ</span><span id="exercise-position" aria-hidden="true">01 / 10</span>
             </div>
-            <p class="exercise-hint" id="exercise-hint" aria-live="polite">Камера спереди или сбоку. Покажите тело целиком, включая стопы.</p>
+            <button class="exercise-select" id="exercise-select" type="button" aria-haspopup="dialog"
+              aria-controls="exercise-sheet" aria-expanded="false" aria-describedby="exercise-hint"
+              aria-labelledby="exercise-picker-label exercise-selected-name exercise-selected-muscle exercise-selected-mode">
+              <span class="exercise-select-visual" aria-hidden="true">
+                <svg viewBox="0 0 64 64"><use id="exercise-selected-icon" href="#exercise-icon-squat"/></svg>
+              </span>
+              <span class="exercise-select-copy">
+                <strong id="exercise-selected-name">Приседания</strong>
+                <span class="exercise-select-meta"><span id="exercise-selected-muscle">Ноги</span><span id="exercise-selected-mode">Повторения</span></span>
+              </span>
+              <span class="exercise-select-action" aria-hidden="true">ИЗМЕНИТЬ
+                <svg viewBox="0 0 20 20" fill="none"><path d="m6 8 4 4 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+            </button>
+            <p class="exercise-hint"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#exercise-camera-icon"/></svg><span id="exercise-hint" aria-live="polite">Камера спереди или сбоку. Покажите тело целиком, включая стопы.</span></p>
           </div>
         </div>
         <div class="setup-choices">
@@ -263,22 +297,212 @@
     </form>
   </dialog>
 
-  <!-- Компактные итоги; showWorkoutResults можно расширить на следующем шаге. -->
+  <!-- Отдельный модальный слой поверх настройки: список прокручивается независимо от действий. -->
+  <dialog class="exercise-sheet" id="exercise-sheet" aria-labelledby="exercise-sheet-title" aria-describedby="exercise-sheet-description">
+    <div class="exercise-sheet-content">
+      <div class="exercise-sheet-handle" aria-hidden="true"><span></span></div>
+      <header class="exercise-sheet-header">
+        <div class="exercise-sheet-topline">
+          <span class="exercise-sheet-eyebrow"><span></span> БИБЛИОТЕКА ДВИЖЕНИЙ</span>
+          <button class="exercise-sheet-close" id="exercise-sheet-close" type="button" aria-label="Закрыть выбор упражнения">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="exercise-sheet-titleline">
+          <h2 id="exercise-sheet-title">Выберите <em>движение.</em></h2>
+          <span class="exercise-sheet-count" aria-label="10 упражнений">10 <small>ВИДОВ</small></span>
+        </div>
+        <p id="exercise-sheet-description">Выберите упражнение и подготовьте камеру.</p>
+        <div class="exercise-list-heading"><span>ВСЕ УПРАЖНЕНИЯ</span><span>01 — 10</span></div>
+      </header>
+      <div class="exercise-list" role="radiogroup" aria-label="Выбор упражнения">
+        <button class="exercise-card" type="button" role="radio" data-exercise="squat" aria-checked="true" tabindex="0">
+          <span class="exercise-card-visual" aria-hidden="true"><span class="exercise-card-index">01</span><svg viewBox="0 0 64 64"><use href="#exercise-icon-squat"/></svg></span>
+          <span class="exercise-card-copy">
+            <span class="exercise-card-name">Приседания</span>
+            <span class="exercise-card-badges"><span class="exercise-badge exercise-badge-muscle">Ноги</span><span class="exercise-badge">Повторения</span></span>
+            <span class="exercise-card-camera"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#exercise-camera-icon"/></svg>Камера спереди или сбоку</span>
+          </span>
+          <span class="exercise-card-check" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><path d="m5.5 10 3 3 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </button>
+        <button class="exercise-card" type="button" role="radio" data-exercise="plank" aria-checked="false" tabindex="-1">
+          <span class="exercise-card-visual" aria-hidden="true"><span class="exercise-card-index">02</span><svg viewBox="0 0 64 64"><use href="#exercise-icon-plank"/></svg></span>
+          <span class="exercise-card-copy">
+            <span class="exercise-card-name">Планка</span>
+            <span class="exercise-card-badges"><span class="exercise-badge exercise-badge-muscle">Кор</span><span class="exercise-badge">Таймер</span></span>
+            <span class="exercise-card-camera"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#exercise-camera-icon"/></svg>Камера сбоку</span>
+          </span>
+          <span class="exercise-card-check" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><path d="m5.5 10 3 3 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </button>
+        <button class="exercise-card" type="button" role="radio" data-exercise="sidePlank" aria-checked="false" tabindex="-1">
+          <span class="exercise-card-visual" aria-hidden="true"><span class="exercise-card-index">03</span><svg viewBox="0 0 64 64"><use href="#exercise-icon-sidePlank"/></svg></span>
+          <span class="exercise-card-copy">
+            <span class="exercise-card-name">Боковая планка</span>
+            <span class="exercise-card-badges"><span class="exercise-badge exercise-badge-muscle">Кор</span><span class="exercise-badge">Таймер</span></span>
+            <span class="exercise-card-camera"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#exercise-camera-icon"/></svg>Камера спереди</span>
+          </span>
+          <span class="exercise-card-check" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><path d="m5.5 10 3 3 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </button>
+        <button class="exercise-card" type="button" role="radio" data-exercise="bicepCurl" aria-checked="false" tabindex="-1">
+          <span class="exercise-card-visual" aria-hidden="true"><span class="exercise-card-index">04</span><svg viewBox="0 0 64 64"><use href="#exercise-icon-bicepCurl"/></svg></span>
+          <span class="exercise-card-copy">
+            <span class="exercise-card-name">Сгибания рук</span>
+            <span class="exercise-card-badges"><span class="exercise-badge exercise-badge-muscle">Бицепс</span><span class="exercise-badge">Повторения</span></span>
+            <span class="exercise-card-camera"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#exercise-camera-icon"/></svg>Камера сбоку</span>
+          </span>
+          <span class="exercise-card-check" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><path d="m5.5 10 3 3 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </button>
+        <button class="exercise-card" type="button" role="radio" data-exercise="lunge" aria-checked="false" tabindex="-1">
+          <span class="exercise-card-visual" aria-hidden="true"><span class="exercise-card-index">05</span><svg viewBox="0 0 64 64"><use href="#exercise-icon-lunge"/></svg></span>
+          <span class="exercise-card-copy">
+            <span class="exercise-card-name">Выпады</span>
+            <span class="exercise-card-badges"><span class="exercise-badge exercise-badge-muscle">Ноги</span><span class="exercise-badge">Повторения</span></span>
+            <span class="exercise-card-camera"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#exercise-camera-icon"/></svg>Камера сбоку</span>
+          </span>
+          <span class="exercise-card-check" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><path d="m5.5 10 3 3 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </button>
+        <button class="exercise-card" type="button" role="radio" data-exercise="overheadPress" aria-checked="false" tabindex="-1">
+          <span class="exercise-card-visual" aria-hidden="true"><span class="exercise-card-index">06</span><svg viewBox="0 0 64 64"><use href="#exercise-icon-overheadPress"/></svg></span>
+          <span class="exercise-card-copy">
+            <span class="exercise-card-name">Жим вверх</span>
+            <span class="exercise-card-badges"><span class="exercise-badge exercise-badge-muscle">Плечи</span><span class="exercise-badge">Повторения</span></span>
+            <span class="exercise-card-camera"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#exercise-camera-icon"/></svg>Камера спереди или сбоку</span>
+          </span>
+          <span class="exercise-card-check" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><path d="m5.5 10 3 3 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </button>
+        <button class="exercise-card" type="button" role="radio" data-exercise="deadlift" aria-checked="false" tabindex="-1">
+          <span class="exercise-card-visual" aria-hidden="true"><span class="exercise-card-index">07</span><svg viewBox="0 0 64 64"><use href="#exercise-icon-deadlift"/></svg></span>
+          <span class="exercise-card-copy">
+            <span class="exercise-card-name">Румынская тяга</span>
+            <span class="exercise-card-badges"><span class="exercise-badge exercise-badge-muscle">Задняя цепь</span><span class="exercise-badge">Повторения</span></span>
+            <span class="exercise-card-camera"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#exercise-camera-icon"/></svg>Камера строго сбоку</span>
+          </span>
+          <span class="exercise-card-check" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><path d="m5.5 10 3 3 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </button>
+        <button class="exercise-card" type="button" role="radio" data-exercise="jumpingJacks" aria-checked="false" tabindex="-1">
+          <span class="exercise-card-visual" aria-hidden="true"><span class="exercise-card-index">08</span><svg viewBox="0 0 64 64"><use href="#exercise-icon-jumpingJacks"/></svg></span>
+          <span class="exercise-card-copy">
+            <span class="exercise-card-name">Jumping jacks</span>
+            <span class="exercise-card-badges"><span class="exercise-badge exercise-badge-muscle">Всё тело</span><span class="exercise-badge">Повторения</span></span>
+            <span class="exercise-card-camera"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#exercise-camera-icon"/></svg>Камера спереди</span>
+          </span>
+          <span class="exercise-card-check" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><path d="m5.5 10 3 3 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </button>
+        <button class="exercise-card" type="button" role="radio" data-exercise="gluteBridge" aria-checked="false" tabindex="-1">
+          <span class="exercise-card-visual" aria-hidden="true"><span class="exercise-card-index">09</span><svg viewBox="0 0 64 64"><use href="#exercise-icon-gluteBridge"/></svg></span>
+          <span class="exercise-card-copy">
+            <span class="exercise-card-name">Ягодичный мостик</span>
+            <span class="exercise-card-badges"><span class="exercise-badge exercise-badge-muscle">Ягодицы</span><span class="exercise-badge">Повторения</span></span>
+            <span class="exercise-card-camera"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#exercise-camera-icon"/></svg>Камера строго сбоку</span>
+          </span>
+          <span class="exercise-card-check" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><path d="m5.5 10 3 3 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </button>
+        <button class="exercise-card" type="button" role="radio" data-exercise="pullup" aria-checked="false" tabindex="-1">
+          <span class="exercise-card-visual" aria-hidden="true"><span class="exercise-card-index">10</span><svg viewBox="0 0 64 64"><use href="#exercise-icon-pullup"/></svg></span>
+          <span class="exercise-card-copy">
+            <span class="exercise-card-name">Подтягивания</span>
+            <span class="exercise-card-badges"><span class="exercise-badge exercise-badge-muscle">Спина</span><span class="exercise-badge">Повторения</span></span>
+            <span class="exercise-card-camera"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#exercise-camera-icon"/></svg>Камера спереди · видно лицо</span>
+          </span>
+          <span class="exercise-card-check" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none"><path d="m5.5 10 3 3 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </button>
+      </div>
+      <footer class="exercise-sheet-footer">
+        <span class="exercise-sheet-selection"><small>ВЫБРАНО</small><strong id="exercise-sheet-selection">Приседания</strong></span>
+        <button class="exercise-sheet-done" id="exercise-sheet-done" type="button"><span>Готово</span><span aria-hidden="true">↗</span></button>
+      </footer>
+    </div>
+  </dialog>
+
+  <!-- Полноэкранные итоги: прокручивается содержимое, действия остаются внизу. -->
   <dialog class="workout-dialog results-dialog" id="workout-results" aria-labelledby="results-title" aria-describedby="results-message">
-    <div class="results-content">
-      <div class="dialog-topline">
-        <span class="dialog-eyebrow"><span aria-hidden="true"></span> ПОДХОД ЗАВЕРШЁН</span>
-        <button class="dialog-close" id="close-results" type="button" aria-label="Закрыть итоги">×</button>
+    <div class="summary-shell">
+      <header class="summary-topbar">
+        <div class="summary-brand">
+          <span class="summary-brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 16.5 9 11l3.3 3 6.9-7.5M16 6.5h3.2v3.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+          <span><strong>MOTION<span>.</span></strong><small>ОТЧЁТ О ДВИЖЕНИИ</small></span>
+        </div>
+        <button class="summary-close" id="close-results" type="button" aria-label="Закрыть итоги и вернуться на главный экран">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        </button>
+      </header>
+      <div class="summary-scroll" id="summary-scroll" role="region" aria-label="Подробные итоги подхода" tabindex="0">
+        <div class="summary-content">
+          <div class="summary-intro">
+            <div class="summary-kicker"><span></span> АНАЛИЗ ЗАВЕРШЁН <span class="summary-kicker-line"></span> ОТЧЁТ О ПОДХОДЕ</div>
+            <div class="summary-intro-heading">
+              <div><h2 id="results-title">Итоги <em>подхода.</em></h2><p id="results-message">Подход завершён.</p></div>
+              <span class="summary-session-badge" id="results-status">ПОДХОД ЗАВЕРШЁН</span>
+            </div>
+          </div>
+
+          <section class="summary-score" id="results-score-card" data-score="unknown" aria-labelledby="score-heading">
+            <div class="summary-score-ring" id="results-score-ring" role="img" aria-label="Оценка техники недоступна">
+              <svg viewBox="0 0 120 120" aria-hidden="true">
+                <circle class="summary-score-track" cx="60" cy="60" r="52"/>
+                <circle class="summary-score-progress" id="results-score-progress" cx="60" cy="60" r="52"/>
+              </svg>
+              <span class="summary-score-number"><strong id="results-score-value">—</strong><small id="results-score-unit" hidden>%</small></span>
+            </div>
+            <div class="summary-score-copy">
+              <span class="summary-card-kicker">ОЦЕНКА ПО КАДРАМ</span>
+              <h3 id="score-heading">Качество <em>движения</em></h3>
+              <span class="summary-grade" id="results-grade">Недостаточно данных</span>
+              <p id="results-score-description">Завершите повтор, чтобы получить оценку.</p>
+            </div>
+            <span class="summary-score-corner" aria-hidden="true">01 / АНАЛИЗ</span>
+          </section>
+
+          <div class="summary-section-heading"><div><span>02 / ОБЗОР</span><h3>Ваш результат</h3></div><span>ПОКАЗАТЕЛИ ПОДХОДА</span></div>
+          <section class="summary-metrics" aria-label="Основные показатели подхода">
+            <article class="summary-metric">
+              <div class="summary-metric-top"><span>ВСЕГО СДЕЛАНО</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 15 4-4 3 3 7-7M15 7h4v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+              <div class="summary-metric-value"><strong id="results-reps">0</strong><span id="results-goal">без цели</span></div>
+              <small id="results-metric-label">ПОВТОРЫ</small>
+            </article>
+            <article class="summary-metric">
+              <div class="summary-metric-top"><span>ЧИСТЫЕ ПОВТОРЫ</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.6"/><path d="m8.5 12 2.4 2.4 4.8-4.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+              <div class="summary-metric-value"><strong id="results-clean">—</strong></div>
+              <small id="results-clean-description">ПО ДОСТУПНЫМ ПРИЗНАКАМ</small>
+            </article>
+            <article class="summary-metric">
+              <div class="summary-metric-top"><span>ВРЕМЯ ПОДХОДА</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.6"/><path d="M12 7.5V12l3 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></div>
+              <div class="summary-metric-value"><strong id="results-duration">00:00</strong></div>
+              <small>ВКЛЮЧАЯ ПАУЗЫ</small>
+            </article>
+            <article class="summary-metric">
+              <div class="summary-metric-top"><span>СРЕДНИЙ ТЕМП</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 15a7 7 0 0 1 14 0M12 15l3.5-4M9 19h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+              <div class="summary-metric-value"><strong id="results-tempo">—</strong><span id="results-tempo-unit">с / повтор</span></div>
+              <small id="results-tempo-description">С УЧЁТОМ ПАУЗ</small>
+            </article>
+          </section>
+
+          <section class="summary-hold" id="results-hold" aria-labelledby="results-hold-heading" hidden>
+            <div class="summary-hold-top"><div><span class="summary-card-kicker">ВРЕМЯ ПОД НАБЛЮДЕНИЕМ</span><h3 id="results-hold-heading">Подтверждено по кадрам</h3></div><strong id="results-hold-ratio">—</strong></div>
+            <div class="summary-hold-track" id="results-hold-progress" role="progressbar" aria-label="Доля подтверждённого времени подхода" aria-valuemin="0" aria-valuemax="100"><span id="results-hold-fill"></span></div>
+            <p>Доля подтверждённого времени в общей длительности подхода. Ожидание, паузы и потеря позы снижают долю; это не оценка техники.</p>
+          </section>
+
+          <div class="summary-section-heading summary-breakdown-heading"><div><span>03 / ДЕТАЛИ</span><h3>Разбор движений</h3></div><span>ПО ПОПЫТКАМ</span></div>
+          <section class="summary-breakdown" aria-label="Зафиксированные замечания">
+            <p class="summary-error-state" id="results-error-state">Недостаточно данных для разбора.</p>
+            <ul class="summary-error-list" id="results-error-list" aria-live="polite"></ul>
+            <p class="summary-breakdown-note" id="results-breakdown-note">Частота — число завершённых попыток с замечанием, включая незасчитанные. Оценка рассчитывается только по повторам.</p>
+          </section>
+
+          <section class="summary-coach" aria-labelledby="coach-heading">
+            <div class="summary-coach-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3ZM18.5 15l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg></div>
+            <div><span class="summary-card-kicker">ЗАМЕТКА ТРЕНЕРА</span><h3 id="coach-heading">На что обратить внимание</h3><p id="results-coach">Проверьте ракурс камеры перед следующим подходом.</p></div>
+          </section>
+          <p class="summary-disclaimer">Оценка приблизительна и учитывает только доступные признаки на видео. Она не определяет здоровье или риск травмы. При боли остановитесь и обратитесь к специалисту.</p>
+        </div>
       </div>
-      <div class="results-mark" aria-hidden="true">✓</div>
-      <h2 id="results-title">Отличная работа!</h2>
-      <p id="results-message">Ваш подход завершён.</p>
-      <div class="results-stats">
-        <div><span id="results-metric-label">ПОВТОРЫ</span><strong id="results-reps">0</strong><small id="results-goal">Свободный режим</small></div>
-        <div><span>ВРЕМЯ ПОДХОДА</span><strong id="results-duration">00:00</strong><small>с момента старта</small></div>
-      </div>
-      <button class="start-workout" id="new-workout" type="button"><span>Новый подход</span><span aria-hidden="true">↗</span></button>
-      <button class="results-dismiss" id="dismiss-results" type="button">На главный экран</button>
+      <footer class="summary-actions">
+        <div class="summary-actions-inner">
+          <button class="summary-repeat" id="repeat-workout" type="button"><span>Повторить подход</span><span aria-hidden="true">↗</span></button>
+          <button class="summary-choose" id="new-workout" type="button"><span>К выбору упражнений</span><span aria-hidden="true">→</span></button>
+        </div>
+      </footer>
     </div>
   </dialog>
 </body>

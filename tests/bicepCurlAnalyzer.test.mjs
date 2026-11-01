@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { trackWorkout, assertAllRecommendations } from './helpers/workoutAnalytics.mjs';
 
 const geometrySource = await readFile(new URL('../geometry.js', import.meta.url));
 const geometryUrl = `data:text/javascript;base64,${geometrySource.toString('base64')}`;
@@ -525,4 +526,19 @@ test('в промежутке 45–55° рекомендация о цели н�
   assert.ok(!result.currentErrors.includes(ERROR.SHORT_TOP));
   assert.match(result.feedbackMessage, /локоть у корпуса/i);
   assert.match(result.feedbackMessage, /целевой верхней точки/);
+});
+
+// Интеграция итогов с настоящим автоматом, не с подменёнными фазами.
+test('аналитика: завершённые повторы и попытки bicepCurl', () => {
+  const exercise = analyzer();
+  const stats = trackWorkout(exercise, 'bicepCurl');
+  fullRep(exercise);
+  for (const angle of [170, 130, 56, 59, 160]) feed(exercise, angle);
+  const result = stats.snapshot(4000, exercise.repCount);
+  assert.equal(exercise.repCount, 2);
+  assert.equal(result.cleanReps, 1);
+  assert.equal(result.flaggedReps, 1);
+  assert.equal(result.scorePercent, 50);
+  assert.equal(result.errors.find((item) => item.name === ERROR.SHORT_TOP)?.count, 1);
+  assertAllRecommendations('bicepCurl', ERROR);
 });

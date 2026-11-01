@@ -1,6 +1,7 @@
 import { findAngle, findVerticalAngle } from './geometry.js';
 import { SQUAT_ERROR, SQUAT_PHASE } from './analyzer.js';
 import { EXERCISES, createAnalyzer } from './exerciseFactory.js';
+import { WorkoutAnalytics, scoreCategory } from './workoutAnalytics.js';
 
 // Версия WASM должна совпадать с версией ESM-модуля в importmap файла index.html.
 // Модель Lite меньше и быстрее остальных вариантов Pose Landmarker.
@@ -62,6 +63,16 @@ const workoutForm = document.getElementById('workout-form');
 const setupSource = document.getElementById('setup-source');
 const setupDescription = document.getElementById('setup-description');
 const exerciseSelect = document.getElementById('exercise-select');
+const exerciseSheet = document.getElementById('exercise-sheet');
+const exerciseSheetClose = document.getElementById('exercise-sheet-close');
+const exerciseSheetDone = document.getElementById('exercise-sheet-done');
+const exerciseSheetSelection = document.getElementById('exercise-sheet-selection');
+const exerciseCards = [...document.querySelectorAll('.exercise-card')];
+const exercisePosition = document.getElementById('exercise-position');
+const exerciseSelectedName = document.getElementById('exercise-selected-name');
+const exerciseSelectedMuscle = document.getElementById('exercise-selected-muscle');
+const exerciseSelectedMode = document.getElementById('exercise-selected-mode');
+const exerciseSelectedIcon = document.getElementById('exercise-selected-icon');
 const exerciseHint = document.getElementById('exercise-hint');
 const goalUnit = document.getElementById('goal-unit');
 const freeGoalDescription = document.getElementById('free-goal-description');
@@ -71,15 +82,36 @@ const customGoal = document.getElementById('custom-goal');
 const goalError = document.getElementById('goal-error');
 const freeGoal = document.getElementById('free-goal');
 const resultsDialog = document.getElementById('workout-results');
-const resultsTitle = document.getElementById('results-title');
 const resultsMessage = document.getElementById('results-message');
+const resultsStatus = document.getElementById('results-status');
 const resultsReps = document.getElementById('results-reps');
 const resultsMetricLabel = document.getElementById('results-metric-label');
 const resultsGoal = document.getElementById('results-goal');
 const resultsDuration = document.getElementById('results-duration');
+const resultsScoreCard = document.getElementById('results-score-card');
+const resultsScoreRing = document.getElementById('results-score-ring');
+const resultsScoreProgress = document.getElementById('results-score-progress');
+const resultsScoreValue = document.getElementById('results-score-value');
+const resultsScoreUnit = document.getElementById('results-score-unit');
+const resultsGrade = document.getElementById('results-grade');
+const resultsScoreDescription = document.getElementById('results-score-description');
+const resultsClean = document.getElementById('results-clean');
+const resultsCleanDescription = document.getElementById('results-clean-description');
+const resultsTempo = document.getElementById('results-tempo');
+const resultsTempoUnit = document.getElementById('results-tempo-unit');
+const resultsTempoDescription = document.getElementById('results-tempo-description');
+const resultsHold = document.getElementById('results-hold');
+const resultsHoldRatio = document.getElementById('results-hold-ratio');
+const resultsHoldProgress = document.getElementById('results-hold-progress');
+const resultsHoldFill = document.getElementById('results-hold-fill');
+const resultsErrorState = document.getElementById('results-error-state');
+const resultsErrorList = document.getElementById('results-error-list');
+const resultsBreakdownNote = document.getElementById('results-breakdown-note');
+const resultsCoach = document.getElementById('results-coach');
+const summaryScroll = document.getElementById('summary-scroll');
 const newWorkout = document.getElementById('new-workout');
+const repeatWorkout = document.getElementById('repeat-workout');
 const closeResults = document.getElementById('close-results');
-const dismissResults = document.getElementById('dismiss-results');
 const phaseOutput = document.getElementById('squat-phase');
 const feedbackOutput = document.getElementById('squat-feedback');
 const adviceBanner = document.getElementById('advice-banner');
@@ -92,6 +124,7 @@ const squatViewControl = document.getElementById('squat-view-control');
 let currentExerciseId = 'squat';
 let currentExercise = EXERCISES[currentExerciseId];
 let currentAnalyzer = createAnalyzer(currentExerciseId);
+let workoutAnalytics = new WorkoutAnalytics(currentExerciseId, currentExercise.mode, { squatShallow: SQUAT_ERROR.SHALLOW });
 const PHASE_LABELS = {
   WAITING: 'Подготовка', STANDING: 'Стоя', DESCENDING: 'Опускание',
   BOTTOM: 'Нижняя точка', ASCENDING: 'Подъём', DOWN: 'Исходное',
@@ -143,6 +176,7 @@ function setWorkoutInterface(active) {
   topbar.dataset.workout = active ? 'active' : 'idle';
   controls.dataset.workout = active ? 'active' : 'idle';
   exerciseSelect.disabled = active;
+  exerciseCards.forEach((card) => { card.disabled = active; });
   if (!active) {
     repTarget.hidden = true;
     repProgress.hidden = true;
@@ -215,11 +249,29 @@ function chooseGoal(mode, value = null) {
   goalError.hidden = true;
 }
 
+// Состояние карточки, радиогруппы и рекомендаций берётся из того же каталога,
+// который создаёт анализатор. В любой момент выбрана ровно одна карточка.
+function syncExercisePicker() {
+  const ids = Object.keys(EXERCISES);
+  exerciseSelect.dataset.exercise = currentExerciseId;
+  exercisePosition.textContent = `${String(ids.indexOf(currentExerciseId) + 1).padStart(2, '0')} / ${ids.length}`;
+  exerciseSelectedName.textContent = currentExercise.label;
+  exerciseSelectedMuscle.textContent = currentExercise.muscle;
+  exerciseSelectedMode.textContent = currentExercise.mode === 'time' ? 'Таймер' : 'Повторения';
+  exerciseSelectedIcon.setAttribute('href', `#exercise-icon-${currentExerciseId}`);
+  exerciseSheetSelection.textContent = currentExercise.label;
+  exerciseCards.forEach((card) => {
+    const selected = card.dataset.exercise === currentExerciseId;
+    card.setAttribute('aria-checked', String(selected));
+    card.tabIndex = selected ? 0 : -1;
+  });
+}
+
 // Настройки и единицы всегда берём из одного каталога; значения цели не
 // переносятся между упражнениями с разными единицами измерения.
 function configureExerciseInterface() {
   const isHold = currentExercise.mode === 'time';
-  exerciseSelect.value = currentExerciseId;
+  syncExercisePicker();
   exerciseHint.textContent = currentExercise.hint;
   setupDescription.textContent = isHold
     ? 'Сколько секунд удерживать?'
@@ -245,20 +297,17 @@ function configureExerciseInterface() {
 }
 
 function selectExercise(exerciseId) {
-  // Даже программное изменение select во время подхода не меняет автомат и счётчик.
-  if (workout.active || !Object.prototype.hasOwnProperty.call(EXERCISES, exerciseId)) {
-    exerciseSelect.value = currentExerciseId;
-    return false;
+  // Даже искусственный click во время подхода не меняет автомат и счётчик.
+  if (workout.active || !Object.prototype.hasOwnProperty.call(EXERCISES, exerciseId)) return false;
+  // Повторный выбор не должен сбрасывать уже настроенную цель или анализатор.
+  if (exerciseId === currentExerciseId) return true;
+  currentExerciseId = exerciseId;
+  currentExercise = EXERCISES[exerciseId];
+  currentAnalyzer = createAnalyzer(exerciseId);
+  if (exerciseId === 'squat' && ['auto', 'front', 'side'].includes(squatView.value)) {
+    currentAnalyzer.setView(squatView.value);
   }
-  if (exerciseId !== currentExerciseId) {
-    currentExerciseId = exerciseId;
-    currentExercise = EXERCISES[exerciseId];
-    currentAnalyzer = createAnalyzer(exerciseId);
-    if (exerciseId === 'squat' && ['auto', 'front', 'side'].includes(squatView.value)) {
-      currentAnalyzer.setView(squatView.value);
-    }
-    invalidateFrameClock();
-  }
+  invalidateFrameClock();
   configureExerciseInterface();
   return true;
 }
@@ -294,9 +343,26 @@ function closeDialog(dialog) {
   else dialog.removeAttribute('open');
 }
 
+// Отдельный dialog находится поверх окна настройки, поэтому Escape и клик
+// по фону закрывают только каталог и возвращают фокус на кнопку выбора.
+function openExerciseSheet() {
+  if (workout.active || !isDialogOpen(setupDialog) || isDialogOpen(exerciseSheet)) return;
+  openDialog(exerciseSheet);
+  exerciseSelect.setAttribute('aria-expanded', 'true');
+  exerciseCards.find((card) => card.dataset.exercise === currentExerciseId)?.focus();
+}
+
+function closeExerciseSheet(restoreFocus = true) {
+  const wasOpen = isDialogOpen(exerciseSheet);
+  closeDialog(exerciseSheet);
+  exerciseSelect.setAttribute('aria-expanded', 'false');
+  if (wasOpen && restoreFocus && isDialogOpen(setupDialog) && !workout.active) exerciseSelect.focus();
+}
+
 // Окно открывается до getUserMedia и до декодирования выбранного файла.
 function openWorkoutSetup(source) {
   if (workout.active) return;
+  closeExerciseSheet(false);
   pendingSource = source;
   chooseGoal('preset', currentExercise.defaultGoal);
   setupSource.textContent = source.mode === 'file'
@@ -349,31 +415,129 @@ function playCompletionBeep(runId) {
   else audio.resume().then(play).catch(() => {});
 }
 
-// Итоги содержат отдельно время подхода и фактически подтверждённое удержание.
-function showWorkoutResults(result) {
-  const isHold = result.mode === 'time';
-  resultsTitle.textContent = result.reason === 'goal' ? 'Цель достигнута!' : 'Отличная работа!';
-  resultsMessage.textContent = `${EXERCISES[result.exerciseId].label}: ${result.reason === 'goal'
-    ? 'запланированный подход завершён.' : 'подход завершён вручную.'}`;
-  resultsMetricLabel.textContent = isHold ? 'УДЕРЖАНИЕ, СЕК' : 'ПОВТОРЫ';
-  resultsReps.textContent = String(isHold ? Math.floor(result.activeHoldTime) : result.repCount);
-  resultsGoal.textContent = result.goal === null ? 'Свободный режим'
-    : `Цель: ${result.goal}${isHold ? ' с' : ''}`;
-  resultsDuration.textContent = formatVideoTime(result.durationMs / 1000);
-  openDialog(resultsDialog);
+// Частота относится к завершённым попыткам, а не к количеству видеокадров.
+function attemptCountText(count) {
+  const last = count % 10;
+  const lastTwo = count % 100;
+  const word = last === 1 && lastTwo !== 11 ? 'попытка'
+    : last >= 2 && last <= 4 && (lastTwo < 12 || lastTwo > 14) ? 'попытки' : 'попыток';
+  return `${count} ${word}`;
 }
 
+function formatSummaryNumber(value) {
+  return value.toLocaleString('ru-RU', { maximumFractionDigits: 1 });
+}
+
+// Рендерим неизменяемый снимок подхода, не обращаясь к уже сброшенному автомату.
+function showWorkoutResults(result) {
+  const isHold = result.mode === 'time';
+  const analytics = result.analytics;
+  const exercise = EXERCISES[result.exerciseId];
+  const score = analytics.scorePercent;
+  const category = scoreCategory(score);
+  const metric = isHold ? Math.floor(result.activeHoldTime) : result.repCount;
+  resultsStatus.textContent = result.reason === 'goal' ? 'ЦЕЛЬ ДОСТИГНУТА' : 'ПОДХОД ЗАВЕРШЁН';
+  resultsMessage.textContent = `${exercise.label} · ${result.reason === 'goal'
+    ? 'цель достигнута' : 'завершено вручную'}`;
+  resultsMetricLabel.textContent = isHold ? 'УДЕРЖАНИЕ, СЕК' : 'ПОВТОРЫ';
+  resultsReps.textContent = String(metric);
+  resultsGoal.textContent = result.goal === null ? 'без цели' : `из ${result.goal}${isHold ? ' с' : ''}`;
+  resultsDuration.textContent = formatVideoTime(result.durationMs / 1000);
+
+  resultsScoreCard.dataset.score = category.level;
+  resultsScoreValue.textContent = score === null ? '—' : formatSummaryNumber(score);
+  resultsScoreUnit.hidden = score === null;
+  resultsScoreProgress.style.strokeDashoffset = String(326.726 * (1 - (score ?? 0) / 100));
+  resultsGrade.textContent = isHold ? 'Оценка недоступна' : category.label;
+  if (isHold) {
+    resultsScoreDescription.textContent = 'В планке нет повторов для оценки. Ниже показана доля подтверждённого времени.';
+    resultsScoreRing.setAttribute('aria-label', 'Оценка повторений для удержания недоступна');
+  } else if (score === null) {
+    resultsScoreDescription.textContent = result.repCount
+      ? 'Не хватило видимых данных, чтобы оценить завершённые повторы.'
+      : 'Завершите повтор, чтобы получить оценку по доступным признакам.';
+    resultsScoreRing.setAttribute('aria-label', 'Недостаточно данных для оценки техники');
+  } else {
+    resultsScoreDescription.textContent = `Оценено ${analytics.assessedReps} из ${result.repCount} повторений по доступным признакам.`;
+    resultsScoreRing.setAttribute('aria-label', `Оценка ${formatSummaryNumber(score)} процентов: ${category.label}. ${resultsScoreDescription.textContent}`);
+  }
+
+  resultsClean.textContent = isHold || !result.repCount || !analytics.assessedReps
+    ? '—' : `${analytics.cleanReps} / ${result.repCount}`;
+  resultsCleanDescription.textContent = isHold ? 'НЕ ПРИМЕНИМО К УДЕРЖАНИЮ'
+    : analytics.unknownReps ? `${analytics.unknownReps} НЕ ОЦЕНЕНО` : 'ПО ДОСТУПНЫМ ПРИЗНАКАМ';
+  const tempo = !isHold && result.repCount > 0 ? result.durationMs / 1000 / result.repCount : null;
+  resultsTempo.textContent = tempo === null ? '—' : formatSummaryNumber(tempo);
+  resultsTempoUnit.hidden = tempo === null;
+  resultsTempoDescription.textContent = isHold ? 'НЕ ПРИМЕНИМО К УДЕРЖАНИЮ' : 'С УЧЁТОМ ПАУЗ';
+
+  resultsHold.hidden = !isHold;
+  if (isHold) {
+    const ratio = analytics.holdRatioPercent;
+    resultsHoldRatio.textContent = ratio === null ? '—' : `${formatSummaryNumber(ratio)}%`;
+    resultsHoldFill.style.width = `${ratio ?? 0}%`;
+    if (ratio === null) {
+      resultsHoldProgress.removeAttribute('aria-valuenow');
+      resultsHoldProgress.setAttribute('aria-valuetext', 'Недостаточно данных');
+    } else {
+      resultsHoldProgress.setAttribute('aria-valuenow', String(ratio));
+      resultsHoldProgress.setAttribute('aria-valuetext', `${formatSummaryNumber(ratio)}% времени подхода подтверждено по кадрам`);
+    }
+  }
+
+  const items = analytics.errors.map(({ name, count }) => {
+    const item = document.createElement('li');
+    const icon = document.createElement('span');
+    const title = document.createElement('span');
+    const frequency = document.createElement('span');
+    icon.className = 'summary-error-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = '!';
+    title.className = 'summary-error-copy';
+    title.textContent = name;
+    frequency.className = 'summary-error-count';
+    frequency.textContent = attemptCountText(count);
+    item.append(icon, title, frequency);
+    return item;
+  });
+  resultsErrorList.replaceChildren(...items);
+  resultsErrorState.hidden = items.length > 0;
+  resultsBreakdownNote.hidden = items.length === 0;
+  resultsErrorState.dataset.state = 'neutral';
+  if (!items.length) {
+    if (isHold) {
+      resultsErrorState.textContent = 'Для удержания частота отдельных замечаний не рассчитывается.';
+    } else if (analytics.assessedReps > 0 && analytics.unknownReps === 0) {
+      resultsErrorState.dataset.state = 'good';
+      resultsErrorState.textContent = 'По доступным признакам замечаний не обнаружено 🎉';
+    } else {
+      resultsErrorState.textContent = result.repCount
+        ? 'Недостаточно видимых данных, чтобы уверенно оценить все повторы.'
+        : 'Завершённых повторов пока нет. Разбор появится после движения.';
+    }
+  }
+  resultsCoach.textContent = analytics.errors.length ? analytics.errors[0].advice
+    : isHold ? `${exercise.hint} Время засчитывается только при подтверждённом положении.`
+      : analytics.unknownReps ? `${exercise.hint} Покажите ключевые точки на протяжении всего повтора.`
+        : analytics.assessedReps ? 'Сохраняйте подконтрольный темп и убедитесь, что нужные точки остаются в кадре.'
+          : `${exercise.hint} Завершите повтор, чтобы получить персональную подсказку.`;
+  summaryScroll.scrollTop = 0;
+  openDialog(resultsDialog);
+}
 function finishWorkout(reason = 'manual') {
   if (!workout.active) return null; // Повторный клик и запоздавшие кадры игнорируем.
   const isHold = currentExercise.mode === 'time';
+  const durationMs = Math.max(0, performance.now() - workout.startedAt);
+  const repCount = isHold ? null : currentAnalyzer.repCount;
   const result = Object.freeze({
     reason,
     exerciseId: currentExerciseId,
     mode: currentExercise.mode,
-    repCount: isHold ? null : currentAnalyzer.repCount,
+    repCount,
     activeHoldTime: isHold ? currentAnalyzer.activeHoldTime : null,
     goal: workout.goal,
-    durationMs: Math.max(0, performance.now() - workout.startedAt)
+    durationMs,
+    analytics: workoutAnalytics.snapshot(durationMs, repCount)
   });
   workout.active = false; // Блокируем подсчёт до остановки потока и показа итогов.
   workout.lastResult = result;
@@ -389,9 +553,16 @@ function startWorkout(event) {
   if (workout.active || !pendingSource) return;
   const goal = readWorkoutGoal();
   if (goal === undefined) return;
-  const source = pendingSource;
+  beginWorkout(pendingSource, goal);
+}
+
+// Общий запуск используется настройкой и кнопкой немедленного повтора.
+function beginWorkout(source, goal) {
+  if (workout.active || !source) return;
   pendingSource = null;
+  closeExerciseSheet(false);
   closeDialog(setupDialog);
+  closeDialog(resultsDialog);
 
   workout.active = true;
   workout.goal = goal;
@@ -401,6 +572,8 @@ function startWorkout(event) {
   lastSource = source;
   setWorkoutInterface(true);
   resetAnalysisSession();
+  // После закрытия настройки или итогов фокус остаётся на видимом действии.
+  finishButton.focus();
   if (goal !== null) prepareCompletionSound();
 
   if (source.mode === 'file') switchSource('file', source.file);
@@ -556,6 +729,7 @@ function stopPoseLoop() {
   invalidateFrameClock();
   context?.clearRect(0, 0, canvas.width, canvas.height);
   currentAnalyzer.resetTracking();
+  workoutAnalytics.cancelAttempt();
   phaseOutput.textContent = PHASE_LABELS.WAITING;
   resetAdvice();
   analysisPanel.hidden = true;
@@ -585,6 +759,7 @@ function releaseSource() {
 function resetAnalysisSession() {
   invalidateFrameClock();
   currentAnalyzer.reset();
+  workoutAnalytics = new WorkoutAnalytics(currentExerciseId, currentExercise.mode, { squatShallow: SQUAT_ERROR.SHALLOW });
   updateWorkoutHUD(0);
   phaseOutput.textContent = PHASE_LABELS.WAITING;
   resetAdvice();
@@ -606,6 +781,7 @@ function syncCanvasSize() {
     // Эталоны некоторых автоматов зависят от размеров в пикселях, в том числе
     // при неизменном aspect ratio; прерываем попытку, но сохраняем результат.
     currentAnalyzer.resetTracking();
+    workoutAnalytics.cancelAttempt();
     invalidateFrameClock();
     canvas.width = videoWidth;
     canvas.height = videoHeight;
@@ -1050,6 +1226,9 @@ function updateExerciseAnalysis(landmarks, frame) {
   } else {
     result = currentAnalyzer.update(landmarks);
   }
+  // Сначала сохраняем факты последнего кадра: он может сразу достичь цели
+  // и синхронно открыть итоги внутри колбэка MediaPipe.
+  workoutAnalytics.observe(result, { landmarks, frame, epoch: trackingEpoch, analyzer: currentAnalyzer });
   const isHold = currentExercise.mode === 'time';
   const metric = isHold ? result.activeHoldTime : result.repCount;
   const phase = isHold ? (result.isFormCorrect && !frame?.pausedPreview ? 'Удержание' : 'Пауза')
@@ -1152,6 +1331,7 @@ function hasActiveSource() {
 
 function resetPartialTracking() {
   currentAnalyzer.resetTracking();
+  workoutAnalytics.cancelAttempt();
   invalidateFrameClock();
   phaseOutput.textContent = PHASE_LABELS.WAITING;
   lastVideoTime = -1;
@@ -1199,6 +1379,7 @@ function processPoseFrame(force = false) {
           trackingEpoch !== frameEpoch || timestamp <= lastProcessedTimestamp) return;
       if (skippedOlderFrame) {
         currentAnalyzer.resetTracking();
+        workoutAnalytics.cancelAttempt();
         lastHoldFrameTime = null;
       }
       lastProcessedTimestamp = timestamp;
@@ -1434,18 +1615,38 @@ freeGoal.addEventListener('click', () => chooseGoal('free'));
 workoutForm.addEventListener('submit', startWorkout);
 cancelSetup.addEventListener('click', () => {
   pendingSource = null;
+  closeExerciseSheet(false);
   closeDialog(setupDialog);
 });
 setupDialog.addEventListener('close', () => {
   // Событие close может прийти после повторного открытия другого диалога настройки.
-  if (!isDialogOpen(setupDialog)) pendingSource = null;
+  if (!isDialogOpen(setupDialog)) {
+    pendingSource = null;
+    closeExerciseSheet(false);
+  }
 });
 finishButton.addEventListener('click', () => finishWorkout('manual'));
-closeResults.addEventListener('click', () => closeDialog(resultsDialog));
-dismissResults.addEventListener('click', () => closeDialog(resultsDialog));
+// Кнопка завершения уже скрыта, поэтому после закрытия результата возвращаем
+// клавиатурный фокус на видимый элемент, а не внутрь закрытого диалога.
+function dismissWorkoutResults() {
+  closeDialog(resultsDialog);
+  toggleButton.focus();
+}
+closeResults.addEventListener('click', dismissWorkoutResults);
+resultsDialog.addEventListener('cancel', (event) => {
+  event.preventDefault();
+  dismissWorkoutResults();
+});
+repeatWorkout.addEventListener('click', () => {
+  const previous = workout.lastResult;
+  if (!previous || workout.active || !selectExercise(previous.exerciseId)) return;
+  // Повтор сразу запускает камеру с прежней целью, включая свободный режим.
+  beginWorkout({ mode: 'camera' }, previous.goal);
+});
 newWorkout.addEventListener('click', () => {
   closeDialog(resultsDialog);
   openWorkoutSetup(lastSource);
+  openExerciseSheet();
 });
 
 videoPlay.addEventListener('click', async () => {
@@ -1556,7 +1757,36 @@ video.addEventListener('error', () => {
 });
 
 switchButton.addEventListener('click', switchCamera);
-exerciseSelect.addEventListener('change', () => selectExercise(exerciseSelect.value));
+exerciseSelect.addEventListener('click', openExerciseSheet);
+exerciseSheetClose.addEventListener('click', () => closeExerciseSheet());
+exerciseSheetDone.addEventListener('click', () => closeExerciseSheet());
+exerciseSheet.addEventListener('cancel', (event) => {
+  event.preventDefault();
+  closeExerciseSheet();
+});
+exerciseSheet.addEventListener('click', (event) => {
+  if (event.target === exerciseSheet) closeExerciseSheet();
+});
+exerciseSheet.addEventListener('close', () => {
+  if (!isDialogOpen(exerciseSheet)) exerciseSelect.setAttribute('aria-expanded', 'false');
+});
+exerciseCards.forEach((card, index) => {
+  card.addEventListener('click', () => selectExercise(card.dataset.exercise));
+  // Паттерн radiogroup: стрелки выбирают соседнюю карточку; Home/End — первую/последнюю.
+  // Enter и Space активируют обычную кнопку браузера, без дублирования события click.
+  card.addEventListener('keydown', (event) => {
+    if (workout.active) return;
+    let nextIndex;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowRight') nextIndex = (index + 1) % exerciseCards.length;
+    else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') nextIndex = (index - 1 + exerciseCards.length) % exerciseCards.length;
+    else if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = exerciseCards.length - 1;
+    else return;
+    event.preventDefault();
+    const next = exerciseCards[nextIndex];
+    if (selectExercise(next.dataset.exercise)) next.focus();
+  });
+});
 squatView.addEventListener('change', () => {
   if (currentExerciseId === 'squat') currentAnalyzer.setView(squatView.value);
 });
@@ -1569,6 +1799,7 @@ window.addEventListener('pagehide', () => {
   setWorkoutInterface(false);
   pendingSource = null;
   lastSource = { mode: 'camera' };
+  closeExerciseSheet(false);
   closeDialog(setupDialog);
   closeDialog(resultsDialog);
   stopCamera();

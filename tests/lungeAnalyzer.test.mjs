@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { trackWorkout, assertAllRecommendations } from './helpers/workoutAnalytics.mjs';
 
 const geometrySource = await readFile(new URL('../geometry.js', import.meta.url));
 const geometryUrl = `data:text/javascript;base64,${geometrySource.toString('base64')}`;
@@ -477,4 +478,19 @@ test('соотношение сторон кадра исправляется д
     assert.deepEqual(b.currentErrors, a.currentErrors);
   }
   assert.equal(wide.repCount, 1);
+});
+
+// Интеграция итогов с настоящим автоматом, не с подменёнными фазами.
+test('аналитика: завершённые повторы и попытки lunge', () => {
+  const exercise = analyzer();
+  const stats = trackWorkout(exercise, 'lunge');
+  fullRep(exercise);
+  feed(exercise, 175); feed(exercise, 115); feed(exercise, 119, { rearAngle: 90 }); feed(exercise, 175);
+  const result = stats.snapshot(4000, exercise.repCount);
+  assert.equal(exercise.repCount, 2);
+  assert.equal(result.cleanReps, 1);
+  assert.equal(result.flaggedReps, 1);
+  assert.equal(result.scorePercent, 50);
+  assert.equal(result.errors.find((item) => item.name === ERROR.SHALLOW)?.count, 1);
+  assertAllRecommendations('lunge', ERROR);
 });

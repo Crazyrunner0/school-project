@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { trackWorkout, assertAllRecommendations } from './helpers/workoutAnalytics.mjs';
 
 const geometrySource = await readFile(new URL('../geometry.js', import.meta.url));
 const geometryUrl = `data:text/javascript;base64,${geometrySource.toString('base64')}`;
@@ -562,4 +563,19 @@ test('прямые руки недостаточно высоко относит
   }
   assert.notEqual(press.update(extended(30)).currentPhase, PHASE.LOCKOUT);
   assert.equal(press.update(extended(45)).currentPhase, PHASE.LOCKOUT);
+});
+
+// Интеграция итогов с настоящим автоматом, не с подменёнными фазами.
+test('аналитика: завершённые повторы и попытки overheadPress', () => {
+  const exercise = analyzer();
+  const stats = trackWorkout(exercise, 'overheadPress');
+  fullRep(exercise);
+  for (const angle of [70, 110, 159, 155, 70]) feed(exercise, angle);
+  const result = stats.snapshot(4000, exercise.repCount);
+  assert.equal(exercise.repCount, 2);
+  assert.equal(result.cleanReps, 1);
+  assert.equal(result.flaggedReps, 1);
+  assert.equal(result.scorePercent, 50);
+  assert.equal(result.errors.find((item) => item.name === ERROR.SHORT_PRESS)?.count, 1);
+  assertAllRecommendations('overheadPress', ERROR);
 });

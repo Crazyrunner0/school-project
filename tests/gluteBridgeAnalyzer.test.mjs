@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { trackWorkout, assertAllRecommendations } from './helpers/workoutAnalytics.mjs';
 
 // Браузерный ES-модуль проверяется без package.json, установки пакетов и сборки.
 const geometrySource = await readFile(new URL('../geometry.js', import.meta.url));
@@ -503,4 +504,18 @@ test('resetTracking сохраняет счёт, а reset обнуляет ег�
   bridge.reset();
   assert.equal(bridge.currentPhase, PHASE.WAITING);
   assert.equal(bridge.repCount, 0);
+});
+
+// Интеграция итогов с настоящим автоматом, не с подменёнными фазами.
+test('аналитика: завершённые повторы и попытки gluteBridge', () => {
+  const exercise = analyzer();
+  const stats = trackWorkout(exercise, 'gluteBridge');
+  fullRep(exercise);
+  for (const hipAngle of [110, 130, 150, 140, 110]) feed(exercise, { hipAngle });
+  const result = stats.snapshot(4000, exercise.repCount);
+  assert.equal(exercise.repCount, 1);
+  assert.equal(result.cleanReps, 1);
+  assert.equal(result.scorePercent, 100);
+  assert.equal(result.errors.find((item) => item.name === ERROR.SHORT_LIFT)?.count, 1);
+  assertAllRecommendations('gluteBridge', ERROR);
 });

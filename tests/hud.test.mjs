@@ -4,7 +4,7 @@ import test from 'node:test';
 import { browserModuleUrls } from './helpers/moduleLoader.mjs';
 
 // Загружаем реальный app.js в минимальном DOM без камеры и сторонних зависимостей.
-const { geometryUrl, analyzerUrl, factoryUrl } = await browserModuleUrls();
+const { geometryUrl, analyzerUrl, factoryUrl, analyticsUrl } = await browserModuleUrls();
 const { SQUAT_PHASE: PHASE, SQUAT_ERROR: ERROR } = await import(analyzerUrl);
 
 const strokes = [];
@@ -52,6 +52,7 @@ const appSource = (await readFile(new URL('../app.js', import.meta.url), 'utf8')
   .replace("'./geometry.js'", `'${geometryUrl}'`)
   .replace("'./analyzer.js'", `'${analyzerUrl}'`)
   .replace("'./exerciseFactory.js'", `'${factoryUrl}'`)
+  .replace("'./workoutAnalytics.js'", `'${analyticsUrl}'`)
   + '\nexport { chooseAdvice, updateAdvice, resetAdvice, drawPose, selectExercise, currentAnalyzer as squatAnalyzer };'
   + '\nexport function setConnectionsForTest(value) { poseConnections = value; }'
   + '\nexport function activateWorkoutForTest() { workout.active = true; workout.goal = null; }'

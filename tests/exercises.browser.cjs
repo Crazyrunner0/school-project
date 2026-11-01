@@ -104,7 +104,8 @@ const server = http.createServer((req, res) => {
     await page.click('#toggle-camera');
     const screens = [
       { width: 390, height: 844 }, { width: 280, height: 568 }, { width: 320, height: 480 },
-      { width: 480, height: 320 }, { width: 568, height: 320 }, { width: 844, height: 390 }
+      { width: 480, height: 320 }, { width: 568, height: 320 }, { width: 844, height: 390 },
+      { width: 1440, height: 900 }
     ];
     async function visible(selector, bounds) {
       const data = await page.locator(selector).evaluate((node) => {
@@ -134,10 +135,34 @@ const server = http.createServer((req, res) => {
     }
     const ids = ['squat', 'plank', 'sidePlank', 'bicepCurl', 'lunge', 'overheadPress',
       'deadlift', 'jumpingJacks', 'gluteBridge', 'pullup'];
-    assert.deepEqual(await page.locator('#exercise-select option').evaluateAll((options) => options.map((o) => o.value)), ids);
+    assert.deepEqual(await page.locator('.exercise-card').evaluateAll((cards) => cards.map((card) => card.dataset.exercise)), ids);
+    const catalog = await page.evaluate(async () => {
+      const { EXERCISES } = await import('./exerciseFactory.js');
+      return Object.fromEntries(Object.entries(EXERCISES).map(([id, item]) => [id, {
+        label: item.label, muscle: item.muscle, camera: item.camera, mode: item.mode, hint: item.hint
+      }]));
+    });
+    async function chooseExercise(id) {
+      if (!(await page.locator('#exercise-sheet').isVisible())) await page.click('#exercise-select');
+      assert.equal(await page.locator('#exercise-select').getAttribute('aria-expanded'), 'true');
+      await page.locator(`.exercise-card[data-exercise="${id}"]`).click();
+      assert.equal(await page.locator(`.exercise-card[data-exercise="${id}"]`).getAttribute('aria-checked'), 'true');
+      assert.equal(await page.locator('.exercise-card[aria-checked="true"]').count(), 1);
+      assert.equal(await page.locator('.exercise-card[tabindex="0"]').count(), 1);
+      await page.click('#exercise-sheet-done');
+      assert.equal(await page.locator('#exercise-select').getAttribute('aria-expanded'), 'false');
+    }
     for (const id of ids) {
-      await page.locator('#exercise-select').selectOption(id);
-      assert.ok((await page.locator('#exercise-hint').textContent()).length > 20);
+      const card = page.locator(`.exercise-card[data-exercise="${id}"]`);
+      assert.equal(await card.locator('.exercise-card-name').textContent(), catalog[id].label);
+      assert.equal(await card.locator('.exercise-badge-muscle').textContent(), catalog[id].muscle);
+      assert.equal((await card.locator('.exercise-card-camera').textContent()).trim(), catalog[id].camera);
+      assert.equal(await card.locator('.exercise-badge').nth(1).textContent(), catalog[id].mode === 'time' ? 'Таймер' : 'Повторения');
+      await chooseExercise(id);
+      assert.equal(await page.locator('#exercise-selected-name').textContent(), catalog[id].label);
+      assert.equal(await page.locator('#exercise-selected-muscle').textContent(), catalog[id].muscle);
+      assert.equal(await page.locator('#exercise-selected-mode').textContent(), catalog[id].mode === 'time' ? 'Таймер' : 'Повторения');
+      assert.equal(await page.locator('#exercise-hint').textContent(), catalog[id].hint);
       const isHold = ['plank', 'sidePlank'].includes(id);
       assert.equal(await page.locator('#goal-unit').textContent(), isHold ? 'СЕКУНДЫ' : 'ПОВТОРЕНИЯ');
       assert.equal(await page.locator('#rep-count-label').textContent(), isHold ? 'СЕКУНД' : 'ПОВТОРОВ');
@@ -149,8 +174,85 @@ const server = http.createServer((req, res) => {
         await visible('#start-workout', screen);
       }
     }
+    // Клавиатурный радиошаблон, видимое выделение, сохранение цели и возврат фокуса.
     await page.setViewportSize(screens[0]);
-    await page.locator('#exercise-select').selectOption('plank');
+    await chooseExercise('squat');
+    await page.click('#exercise-select');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.exercise), 'squat');
+    await page.keyboard.press('Shift+Tab');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'exercise-sheet-close');
+    await page.keyboard.press('Tab');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.exercise), 'squat');
+    const colors = await page.evaluate(() => ({
+      selected: getComputedStyle(document.querySelector('.exercise-card[data-exercise="squat"]')).borderTopColor,
+      other: getComputedStyle(document.querySelector('.exercise-card[data-exercise="plank"]')).borderTopColor
+    }));
+    assert.notEqual(colors.selected, colors.other);
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.exercise), 'plank');
+    assert.equal(await page.locator('.exercise-card[data-exercise="plank"]').getAttribute('aria-checked'), 'true');
+    assert.equal(await page.locator('#goal-unit').textContent(), 'СЕКУНДЫ');
+    await page.keyboard.press('End');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.exercise), 'pullup');
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.exercise), 'squat');
+    await page.keyboard.press('ArrowLeft');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.exercise), 'pullup');
+    await page.keyboard.press('Home');
+    assert.equal(await page.evaluate(() => document.activeElement.dataset.exercise), 'squat');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#exercise-sheet').isVisible(), false);
+    assert.equal(await page.locator('#workout-setup').isVisible(), true);
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'exercise-select');
+    assert.equal(await page.locator('#exercise-select').getAttribute('aria-expanded'), 'false');
+
+    await page.locator('#custom-goal').fill('17');
+    await page.click('#exercise-select');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Space'); // текущая карточка не сбрасывает цель
+    await page.click('#exercise-sheet-done');
+    assert.equal(await page.locator('#custom-goal').inputValue(), '17');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'exercise-select');
+    await page.click('#exercise-select');
+    await page.mouse.click(5, 5); // backdrop закрывает только каталог
+    assert.equal(await page.locator('#exercise-sheet').isVisible(), false);
+    assert.equal(await page.locator('#workout-setup').isVisible(), true);
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'exercise-select');
+
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.click('#exercise-select');
+    assert.equal(await page.locator('.exercise-sheet-content').evaluate((node) => getComputedStyle(node).animationName), 'none');
+    await page.click('#exercise-sheet-done');
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+
+    // Независимая прокрутка и доступные действия на узких и горизонтальных экранах.
+    for (const screen of screens) {
+      await page.setViewportSize(screen);
+      await page.click('#exercise-select');
+      await page.locator('.exercise-sheet-content').evaluate(async (node) => {
+        await Promise.all(node.getAnimations().map((animation) => animation.finished.catch(() => {})));
+      });
+      await visible('#exercise-sheet-close', screen);
+      await visible('#exercise-sheet-done', screen);
+      const layout = await page.evaluate(() => {
+        const list = document.querySelector('.exercise-list');
+        const footer = document.querySelector('.exercise-sheet-footer');
+        const lr = list.getBoundingClientRect();
+        const fr = footer.getBoundingClientRect();
+        return { height: list.clientHeight, content: list.scrollHeight, width: list.clientWidth,
+          contentWidth: list.scrollWidth, listBottom: lr.bottom, footerTop: fr.top };
+      });
+      assert.ok(layout.height > 40 && layout.content > layout.height && layout.contentWidth <= layout.width &&
+        layout.listBottom <= layout.footerTop + 1, `каталог ${JSON.stringify(screen)}: ${JSON.stringify(layout)}`);
+      await page.locator('.exercise-card[data-exercise="pullup"]').click();
+      assert.equal(await page.locator('#exercise-sheet-selection').textContent(), 'Подтягивания');
+      assert.ok((await page.locator('.exercise-list').evaluate((list) => list.scrollTop)) > 0);
+      await page.click('#exercise-sheet-done');
+      await visible('#start-workout', screen);
+    }
+
+    await page.setViewportSize(screens[0]);
+    await chooseExercise('plank');
     await page.evaluate(() => { window.__pose = window.__makePose(false); });
     await page.click('#free-goal');
     await page.click('#start-workout');
@@ -158,29 +260,42 @@ const server = http.createServer((req, res) => {
     await page.waitForFunction(() => Number(document.querySelector('#rep-count').textContent) >= 1, null, { timeout: 6000 });
     assert.equal(await page.locator('#squat-view-control').isVisible(), false);
     assert.equal(await page.locator('#exercise-select').isDisabled(), true);
+    assert.equal(await page.locator('.exercise-card[data-exercise="lunge"]').isDisabled(), true);
+    await page.evaluate(() => document.querySelector('.exercise-card[data-exercise="lunge"]').dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    assert.equal(await page.locator('#active-exercise').textContent(), 'ПЛАНКА');
+    assert.equal(await page.locator('.exercise-card[data-exercise="plank"]').getAttribute('aria-checked'), 'true');
     for (const screen of screens) await assertActiveLayout(screen);
     await page.setViewportSize(screens[0]);
     await page.click('#finish-workout');
     await page.waitForSelector('#workout-results[open]');
     assert.equal(await page.locator('#results-metric-label').textContent(), 'УДЕРЖАНИЕ, СЕК');
     assert.ok(Number(await page.locator('#results-reps').textContent()) >= 1);
+    assert.equal(await page.locator('#results-score-value').textContent(), '—');
+    assert.equal(await page.locator('#results-grade').textContent(), 'Оценка недоступна');
+    assert.equal(await page.locator('#results-clean').textContent(), '—');
+    assert.equal(await page.locator('#results-tempo').textContent(), '—');
+    assert.equal(await page.locator('#results-hold').isVisible(), true);
+    assert.match(await page.locator('#results-hold-ratio').textContent(), /^[\d,.]+%$/);
+    assert.match(await page.locator('#results-hold').textContent(), /это не оценка техники/);
+    const ratio = Number(await page.locator('#results-hold-progress').getAttribute('aria-valuenow'));
+    assert.ok(ratio >= 0 && ratio <= 100);
     assert.equal(await page.evaluate(() => window.__beeps), 0);
     await page.click('#new-workout');
-    await page.locator('#exercise-select').selectOption('sidePlank');
+    await chooseExercise('sidePlank');
     await page.locator('#custom-goal').fill('1');
     await page.evaluate(() => { window.__pose = window.__makePose(true); });
     await page.click('#start-workout');
     await page.waitForSelector('#workout-results[open]', { timeout: 8000 });
-    assert.equal(await page.locator('#results-title').textContent(), 'Цель достигнута!');
+    assert.equal(await page.locator('#results-status').textContent(), 'ЦЕЛЬ ДОСТИГНУТА');
     assert.equal(await page.locator('#results-reps').textContent(), '1');
-    assert.equal(await page.locator('#results-goal').textContent(), 'Цель: 1 с');
+    assert.equal(await page.locator('#results-goal').textContent(), 'из 1 с');
     assert.equal(await page.evaluate(() => window.__beeps), 1);
 
     // Длинные ограничения других анализаторов сохраняются в тексте и не перекрывают HUD.
     for (const [id, text] of [['deadlift', 'Округление позвоночника'],
       ['gluteBridge', 'изгиб поясницы'], ['pullup', 'перекладины']]) {
       await page.click('#new-workout');
-      await page.locator('#exercise-select').selectOption(id);
+      await chooseExercise(id);
       await page.click('#free-goal');
       await page.evaluate(() => { window.__pose = null; });
       await page.click('#start-workout');
@@ -194,7 +309,7 @@ const server = http.createServer((req, res) => {
     }
     // Очень длинная цель в HUD не должна заслонять текст другого упражнения.
     await page.click('#new-workout');
-    await page.locator('#exercise-select').selectOption('gluteBridge');
+    await chooseExercise('gluteBridge');
     await page.locator('#custom-goal').fill('9007199254740991');
     await page.click('#start-workout');
     await page.waitForFunction(() => document.querySelector('#tracking-status').textContent === 'АНАЛИЗ АКТИВЕН');
@@ -203,10 +318,11 @@ const server = http.createServer((req, res) => {
     await page.click('#finish-workout');
 
     // Реальный HTMLVideoElement: пауза и seek не включаются в удержание.
-    await page.click('#dismiss-results');
+    await page.click('#close-results');
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'toggle-camera');
     await page.evaluate(() => { window.__pose = window.__makePose(false); });
     await page.locator('#videoFileInput').setInputFiles(fixture);
-    await page.locator('#exercise-select').selectOption('plank');
+    await chooseExercise('plank');
     await page.click('[data-goal="60"]');
     await page.click('#start-workout');
     await page.waitForFunction(() => document.querySelector('#camera').currentTime > 0.7 &&

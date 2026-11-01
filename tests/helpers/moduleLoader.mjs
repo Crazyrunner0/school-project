@@ -21,5 +21,6 @@ export async function browserModuleUrls() {
   for (const [file, url] of Object.entries(analyzerUrls)) {
     factorySource = factorySource.replace(`'./${file}'`, `'${url}'`);
   }
-  return { geometryUrl, analyzerUrl: analyzerUrls['analyzer.js'], factoryUrl: toUrl(factorySource) };
+  const analyticsUrl = toUrl(await readFile(new URL('workoutAnalytics.js', root), 'utf8'));
+  return { geometryUrl, analyzerUrl: analyzerUrls['analyzer.js'], factoryUrl: toUrl(factorySource), analyticsUrl };
 }
