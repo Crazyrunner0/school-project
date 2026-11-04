@@ -1081,7 +1081,6 @@ test('радиокарточки обновляют данные, управля
   assert.equal(element('exercise-selected-name').textContent, 'Планка');
   assert.equal(element('exercise-selected-muscle').textContent, 'Кор');
   assert.equal(element('exercise-selected-mode').textContent, 'Таймер');
-  assert.equal(element('exercise-selected-icon').getAttribute('href'), '#exercise-icon-plank');
   assert.equal(element('exercise-position').textContent, '02 / 10');
   assert.equal(element('exercise-sheet-selection').textContent, 'Планка');
   assert.match(element('exercise-hint').textContent, /сбоку/i);

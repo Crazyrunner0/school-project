@@ -136,6 +136,9 @@ const server = http.createServer((req, res) => {
     const ids = ['squat', 'plank', 'sidePlank', 'bicepCurl', 'lunge', 'overheadPress',
       'deadlift', 'jumpingJacks', 'gluteBridge', 'pullup'];
     assert.deepEqual(await page.locator('.exercise-card').evaluateAll((cards) => cards.map((card) => card.dataset.exercise)), ids);
+    assert.equal(await page.locator('#exercise-sheet svg, #exercise-sheet img, #exercise-sheet picture, #exercise-sheet canvas').count(), 0);
+    assert.equal(await page.locator('.exercise-picker svg, .exercise-picker img, .exercise-picker picture, .exercise-picker canvas').count(), 0);
+    assert.equal(await page.locator('#exercise-sheet').evaluate((node) => /[\p{Extended_Pictographic}\uFE0F]/u.test(node.textContent)), false);
     const catalog = await page.evaluate(async () => {
       const { EXERCISES } = await import('./exerciseFactory.js');
       return Object.fromEntries(Object.entries(EXERCISES).map(([id, item]) => [id, {
@@ -157,7 +160,7 @@ const server = http.createServer((req, res) => {
       assert.equal(await card.locator('.exercise-card-name').textContent(), catalog[id].label);
       assert.equal(await card.locator('.exercise-badge-muscle').textContent(), catalog[id].muscle);
       assert.equal((await card.locator('.exercise-card-camera').textContent()).trim(), catalog[id].camera);
-      assert.equal(await card.locator('.exercise-badge').nth(1).textContent(), catalog[id].mode === 'time' ? 'Таймер' : 'Повторения');
+      assert.equal(await card.locator('.exercise-badge-mode').textContent(), catalog[id].mode === 'time' ? 'Таймер' : 'Повторения');
       await chooseExercise(id);
       assert.equal(await page.locator('#exercise-selected-name').textContent(), catalog[id].label);
       assert.equal(await page.locator('#exercise-selected-muscle').textContent(), catalog[id].muscle);
@@ -188,6 +191,21 @@ const server = http.createServer((req, res) => {
       other: getComputedStyle(document.querySelector('.exercise-card[data-exercise="plank"]')).borderTopColor
     }));
     assert.notEqual(colors.selected, colors.other);
+    const selectedStyle = await page.locator('.exercise-card[data-exercise="squat"]').evaluate((node) => ({
+      background: getComputedStyle(node).backgroundColor,
+      shadow: getComputedStyle(node).boxShadow,
+      backgroundImage: getComputedStyle(node).backgroundImage
+    }));
+    assert.equal(selectedStyle.backgroundImage, 'none');
+    assert.notEqual(selectedStyle.shadow, 'none');
+    const selectedBox = await page.locator('.exercise-card[data-exercise="squat"]').boundingBox();
+    await page.mouse.move(selectedBox.x + selectedBox.width / 2, selectedBox.y + selectedBox.height / 2);
+    await page.mouse.down();
+    await page.waitForTimeout(200);
+    const pressedScale = await page.locator('.exercise-card[data-exercise="squat"]').evaluate((node) =>
+      new DOMMatrixReadOnly(getComputedStyle(node).transform).a);
+    assert.ok(Math.abs(pressedScale - 0.98) < 0.001, `отклик на нажатие: ${pressedScale}`);
+    await page.mouse.up();
     await page.keyboard.press('ArrowDown');
     assert.equal(await page.evaluate(() => document.activeElement.dataset.exercise), 'plank');
     assert.equal(await page.locator('.exercise-card[data-exercise="plank"]').getAttribute('aria-checked'), 'true');
@@ -244,6 +262,30 @@ const server = http.createServer((req, res) => {
       });
       assert.ok(layout.height > 40 && layout.content > layout.height && layout.contentWidth <= layout.width &&
         layout.listBottom <= layout.footerTop + 1, `каталог ${JSON.stringify(screen)}: ${JSON.stringify(layout)}`);
+      const cardsLayout = await page.locator('.exercise-card').evaluateAll((cards) => cards.map((card) => {
+        const bounds = (selector) => {
+          const { left, right, top, bottom } = card.querySelector(selector).getBoundingClientRect();
+          return { left, right, top, bottom };
+        };
+        const { left, right, top, bottom } = card.getBoundingClientRect();
+        const badge = getComputedStyle(card.querySelector('.exercise-card-camera'));
+        return { id: card.dataset.exercise, rect: { left, right, top, bottom },
+          heading: bounds('.exercise-card-heading'), name: bounds('.exercise-card-name'),
+          mode: bounds('.exercise-badge-mode'), badges: bounds('.exercise-card-badges'),
+          muscle: bounds('.exercise-badge-muscle'), camera: bounds('.exercise-card-camera'),
+          overflow: card.scrollWidth > card.clientWidth || card.scrollHeight > card.clientHeight,
+          fontSize: parseFloat(badge.fontSize), fontWeight: Number(badge.fontWeight), spacing: parseFloat(badge.letterSpacing) };
+      }));
+      for (const card of cardsLayout) {
+        const within = (r) => r.left >= card.rect.left - 1 && r.right <= card.rect.right + 1 &&
+          r.top >= card.rect.top - 1 && r.bottom <= card.rect.bottom + 1;
+        assert.ok(!card.overflow && [card.name, card.mode, card.muscle, card.camera].every(within),
+          `содержимое карточки выходит за границы ${JSON.stringify(screen)}: ${JSON.stringify(card)}`);
+        assert.ok(card.name.right <= card.mode.left + 1 && card.heading.bottom <= card.badges.top + 1,
+          `порядок строк карточки ${JSON.stringify(screen)}: ${JSON.stringify(card)}`);
+        assert.ok(card.fontSize >= 11 && card.fontSize <= 12 && card.fontWeight >= 600 && card.spacing >= 0.5,
+          `стиль бейджа ${JSON.stringify(screen)}: ${JSON.stringify(card)}`);
+      }
       await page.locator('.exercise-card[data-exercise="pullup"]').click();
       assert.equal(await page.locator('#exercise-sheet-selection').textContent(), 'Подтягивания');
       assert.ok((await page.locator('.exercise-list').evaluate((list) => list.scrollTop)) > 0);

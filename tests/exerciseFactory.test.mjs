@@ -57,9 +57,14 @@ test('карточки соответствуют каталогу; отсутс
     assert.ok(card.includes(`>${exercise.muscle}</span>`), `${id}: мышцы`);
     assert.ok(card.includes(`>${exercise.mode === 'time' ? 'Таймер' : 'Повторения'}</span>`), `${id}: режим`);
     assert.ok(card.includes(`>${exercise.camera}</span>`), `${id}: ракурс`);
-    assert.ok(card.includes(`href="#exercise-icon-${id}"`), `${id}: иллюстрация`);
+    assert.match(card, /<span class="exercise-card-heading">\s*<span class="exercise-card-name">[^<]+<\/span>\s*<span class="exercise-badge exercise-badge-mode">/);
+    assert.match(card, /<span class="exercise-card-badges">\s*<span class="exercise-badge exercise-badge-muscle">[^<]+<\/span>\s*<span class="exercise-badge exercise-card-camera">/);
+    assert.doesNotMatch(card, /<(?:svg|img|picture|canvas)\b|\p{Extended_Pictographic}|\uFE0F/iu, `${id}: только текст`);
   }
   assert.equal(cards.filter(([card]) => card.includes('aria-checked="true"')).length, 1);
+  const sheet = html.match(/<dialog class="exercise-sheet"[\s\S]*?<\/dialog>/)?.[0];
+  assert.ok(sheet);
+  assert.doesNotMatch(sheet, /<(?:svg|img|picture|canvas)\b|\p{Extended_Pictographic}|\uFE0F/iu);
   for (const id of ['pushup', '__proto__', 'constructor', '', 'not-exercise']) {
     assert.throws(() => createAnalyzer(id), RangeError);
   }

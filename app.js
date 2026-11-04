@@ -72,7 +72,6 @@ const exercisePosition = document.getElementById('exercise-position');
 const exerciseSelectedName = document.getElementById('exercise-selected-name');
 const exerciseSelectedMuscle = document.getElementById('exercise-selected-muscle');
 const exerciseSelectedMode = document.getElementById('exercise-selected-mode');
-const exerciseSelectedIcon = document.getElementById('exercise-selected-icon');
 const exerciseHint = document.getElementById('exercise-hint');
 const goalUnit = document.getElementById('goal-unit');
 const freeGoalDescription = document.getElementById('free-goal-description');
@@ -258,7 +257,6 @@ function syncExercisePicker() {
   exerciseSelectedName.textContent = currentExercise.label;
   exerciseSelectedMuscle.textContent = currentExercise.muscle;
   exerciseSelectedMode.textContent = currentExercise.mode === 'time' ? 'Таймер' : 'Повторения';
-  exerciseSelectedIcon.setAttribute('href', `#exercise-icon-${currentExerciseId}`);
   exerciseSheetSelection.textContent = currentExercise.label;
   exerciseCards.forEach((card) => {
     const selected = card.dataset.exercise === currentExerciseId;

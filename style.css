@@ -1477,15 +1477,7 @@ button {
   white-space: nowrap;
 }
 
-/* Компактная карточка текущего упражнения в настройке подхода. */
-.exercise-symbols {
-  position: absolute;
-  width: 0;
-  height: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-
+/* Типографический выбор упражнения в настройке подхода. */
 .exercise-picker { margin-top: 16px; }
 
 .exercise-picker-heading {
@@ -1507,22 +1499,22 @@ button {
 .exercise-select {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
   min-width: 0;
   min-height: 60px;
-  padding: 7px 10px 7px 7px;
-  color: #f0f8ec;
-  border: 1px solid rgba(126, 214, 155, 0.3);
+  padding: 9px 12px;
+  color: #f4f4f5;
+  border: 1px solid #383f3b;
   border-radius: 14px;
-  background: linear-gradient(115deg, rgba(30, 54, 41, 0.86), rgba(8, 18, 12, 0.72));
+  background: #18181b;
   text-align: left;
   cursor: pointer;
   touch-action: manipulation;
   transition: border-color 180ms ease, background 180ms ease, transform 180ms ease;
 }
 
-.exercise-select:hover { border-color: rgba(98, 244, 159, 0.75); }
+.exercise-select:hover { border-color: #78c99c; }
 .exercise-select:active { transform: scale(0.98); }
 .exercise-select:disabled { cursor: not-allowed; opacity: 0.65; }
 
@@ -1533,37 +1525,6 @@ button {
   outline: 2px solid #e4ffb6;
   outline-offset: 3px;
 }
-
-.exercise-select-visual,
-.exercise-card-visual {
-  position: relative;
-  display: grid;
-  flex: 0 0 auto;
-  overflow: hidden;
-  place-items: center;
-  color: #aaffcf;
-  border: 1px solid rgba(112, 240, 161, 0.15);
-  background: linear-gradient(145deg, #294638, #15251d 68%, #1c3125);
-}
-
-.exercise-select-visual {
-  width: 43px;
-  height: 43px;
-  border-radius: 10px;
-}
-
-.exercise-select-visual svg,
-.exercise-card-visual svg {
-  width: 82%;
-  height: 82%;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 2.25;
-}
-
-.exercise-ground { opacity: 0.45; }
 
 .exercise-select-copy {
   display: flex;
@@ -1577,7 +1538,7 @@ button {
   overflow: hidden;
   font-size: 14px;
   font-weight: 750;
-  line-height: 1.1;
+  line-height: 1.15;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1585,57 +1546,34 @@ button {
 .exercise-select-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  color: #a8cfb4;
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 1;
+  gap: 5px 8px;
+  color: #a5b8ac;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
 }
 
-.exercise-select-meta > span + span::before {
-  margin-right: 4px;
-  color: #5c8e6b;
-  content: "·";
+.exercise-select-meta > span + span {
+  padding-left: 8px;
+  border-left: 1px solid #47564c;
 }
 
 .exercise-select-action {
-  display: flex;
   flex: 0 0 auto;
-  align-items: center;
-  gap: 2px;
-  color: #94b9a0;
-  font-size: 8px;
+  color: #a3d9b8;
+  font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.08em;
 }
 
-.exercise-select-action svg { width: 16px; height: 16px; }
-
 .setup-intro .exercise-hint {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
   margin-top: 7px;
   color: #a5bca8;
   font-size: 11px;
   line-height: 1.4;
 }
 
-.exercise-hint > svg,
-.exercise-card-camera svg {
-  flex: 0 0 auto;
-  width: 14px;
-  height: 14px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.7;
-}
-
-.exercise-hint > svg { color: #81d6a3; }
-
-/* Модальный лист: шапка и действие неподвижны, прокручивается только каталог. */
+/* Заголовок и действия остаются на месте; прокручивается только каталог. */
 .exercise-sheet {
   position: fixed;
   inset: 0;
@@ -1647,13 +1585,11 @@ button {
   margin: auto;
   padding: 0;
   overflow: hidden;
-  color: #f0f6f1;
-  border: 1px solid rgba(166, 227, 184, 0.2);
+  color: #f4f4f5;
+  border: 1px solid #303633;
   border-radius: 24px;
-  background: rgba(18, 23, 20, 0.97);
-  box-shadow: 0 32px 100px rgba(0, 0, 0, 0.62), inset 0 1px rgba(255, 255, 255, 0.055);
-  -webkit-backdrop-filter: blur(22px);
-  backdrop-filter: blur(22px);
+  background: #101211;
+  box-shadow: 0 32px 100px rgba(0, 0, 0, 0.62);
 }
 
 .exercise-sheet:not([open]) { display: none; }
@@ -1669,8 +1605,6 @@ button {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: radial-gradient(ellipse at 95% 0%, rgba(41, 119, 76, 0.16), transparent 42%),
-    linear-gradient(160deg, rgba(29, 37, 31, 0.85), rgba(16, 20, 17, 0.98));
 }
 
 .exercise-sheet[open] .exercise-sheet-content { animation: exercise-sheet-enter 240ms cubic-bezier(.2, .8, .2, 1) both; }
@@ -1679,7 +1613,6 @@ button {
   to { opacity: 1; transform: translateY(0); }
 }
 
-.exercise-sheet-handle { display: none; }
 .exercise-sheet-header { flex: 0 0 auto; padding: 24px 26px 0; }
 .exercise-sheet-topline,
 .exercise-sheet-titleline,
@@ -1691,38 +1624,26 @@ button {
 }
 
 .exercise-sheet-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: #96c5a4;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-}
-
-.exercise-sheet-eyebrow > span {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #00e676;
-  box-shadow: 0 0 12px rgba(0, 230, 118, 0.7);
+  color: #98b5a3;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
 }
 
 .exercise-sheet-close {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  place-items: center;
-  color: #bdcfc0;
-  border: 1px solid rgba(221, 244, 226, 0.14);
-  border-radius: 11px;
-  background: rgba(255, 255, 255, 0.035);
+  min-height: 36px;
+  padding: 8px 12px;
+  color: #c5d3ca;
+  border: 1px solid #343b37;
+  border-radius: 10px;
+  background: #191e1b;
+  font-size: 11px;
+  font-weight: 700;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
-.exercise-sheet-close:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
-.exercise-sheet-close svg { width: 19px; height: 19px; }
+.exercise-sheet-close:hover { color: #fff; border-color: #66786c; }
 .exercise-sheet-titleline { align-items: end; margin-top: 12px; }
 .exercise-sheet-titleline h2 {
   min-width: 0;
@@ -1742,108 +1663,104 @@ button {
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
-.exercise-sheet-count small { display: block; margin-top: 4px; color: #70907a; font-size: 8px; letter-spacing: 0.12em; }
-.exercise-sheet-header > p { margin: 9px 0 0; color: #9daea0; font-size: 12px; line-height: 1.4; }
+.exercise-sheet-count small { display: block; margin-top: 4px; color: #89a08f; font-size: 8px; letter-spacing: 0.12em; }
+.exercise-sheet-header > p { margin: 9px 0 0; color: #a8b7ad; font-size: 12px; line-height: 1.4; }
 .exercise-list-heading {
   margin-top: 21px;
   padding: 12px 0 10px;
-  color: #87a590;
-  border-top: 1px solid rgba(217, 244, 222, 0.1);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  color: #98ada0;
+  border-top: 1px solid #2b332e;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
 }
-.exercise-list-heading span:last-child { color: #5f7b66; font-variant-numeric: tabular-nums; }
+.exercise-list-heading span:last-child { color: #82958a; font-variant-numeric: tabular-nums; }
 
 .exercise-list {
-  display: grid;
+  display: flex;
   flex: 1 1 auto;
-  align-content: start;
-  gap: 9px;
+  flex-direction: column;
+  gap: 10px;
   min-height: 0;
   padding: 2px 26px 16px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-color: rgba(124, 196, 145, 0.4) transparent;
+  scrollbar-color: #596961 transparent;
   scrollbar-width: thin;
 }
 
+/* Карточка: первая строка — название и режим, вторая — мышцы и ракурс. */
 .exercise-card {
-  position: relative;
-  display: grid;
-  grid-template-columns: 76px minmax(0, 1fr) 25px;
-  align-items: center;
-  gap: 14px;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 12px;
   width: 100%;
   min-width: 0;
-  min-height: 100px;
-  padding: 10px;
-  color: #ecf5ed;
-  border: 1px solid rgba(208, 239, 215, 0.11);
-  border-radius: 15px;
-  background: rgba(255, 255, 255, 0.035);
+  min-height: 96px;
+  padding: 15px;
+  color: #f4f4f5;
+  border: 1px solid #27272a;
+  border-radius: 14px;
+  background: #18181b;
   text-align: left;
   cursor: pointer;
   touch-action: manipulation;
   transition: transform 150ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
 }
 
-.exercise-card:hover { border-color: rgba(143, 231, 167, 0.45); background: rgba(185, 248, 201, 0.07); }
+.exercise-card:hover { border-color: #54635b; }
 .exercise-card:active { transform: scale(0.98); }
 .exercise-card:focus-visible { outline-offset: -3px; }
 .exercise-card:disabled { cursor: not-allowed; opacity: 0.65; }
 .exercise-card[aria-checked="true"] {
-  border-color: rgba(0, 230, 118, 0.78);
-  background: linear-gradient(110deg, rgba(31, 95, 59, 0.42), rgba(38, 77, 51, 0.22));
-  box-shadow: inset 3px 0 #00e676, 0 0 24px rgba(0, 230, 118, 0.08);
+  border-color: #00e676;
+  background: #19231d;
+  box-shadow: inset 0 0 0 1px rgba(0, 230, 118, 0.18), 0 0 18px rgba(0, 230, 118, 0.1);
 }
 
-.exercise-card-visual { width: 76px; height: 76px; border-radius: 11px; }
-.exercise-card-visual::before {
-  position: absolute;
-  inset: 0;
-  background-image: linear-gradient(rgba(162, 245, 184, 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(162, 245, 184, 0.07) 1px, transparent 1px);
-  background-size: 14px 14px;
-  content: "";
-  opacity: 0.55;
+.exercise-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
 }
-.exercise-card-visual svg { position: relative; width: 70%; height: 70%; }
-.exercise-card-index { position: absolute; top: 5px; left: 7px; color: rgba(197, 250, 210, 0.45); font-size: 8px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.exercise-card[data-exercise="plank"] .exercise-card-visual,
-.exercise-card[data-exercise="sidePlank"] .exercise-card-visual,
-.exercise-card[data-exercise="gluteBridge"] .exercise-card-visual { color: #a0f6db; background: linear-gradient(145deg, #264b44, #152823); }
-.exercise-card[data-exercise="overheadPress"] .exercise-card-visual,
-.exercise-card[data-exercise="jumpingJacks"] .exercise-card-visual { color: #dbf5a0; background: linear-gradient(145deg, #414d2b, #222b1b); }
-.exercise-card-copy { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; }
-.exercise-card-name { font-size: 15px; font-weight: 750; line-height: 1.15; overflow-wrap: anywhere; }
-.exercise-card-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.exercise-card-name {
+  min-width: 0;
+  color: #f4f4f5;
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.exercise-card-badges { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
 .exercise-badge {
-  padding: 4px 7px;
-  color: #b6c8b9;
-  border: 1px solid rgba(191, 222, 195, 0.12);
-  border-radius: 5px;
-  background: rgba(222, 244, 224, 0.055);
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 5px 9px;
+  color: #c4c8c6;
+  border: 1px solid rgba(228, 228, 231, 0.08);
+  border-radius: 999px;
+  background: rgba(161, 161, 170, 0.1);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.5px;
+  overflow-wrap: anywhere;
 }
-.exercise-badge-muscle { color: #b7efd0; border-color: rgba(97, 226, 145, 0.17); background: rgba(42, 168, 90, 0.1); }
-.exercise-card-camera { display: flex; align-items: center; gap: 5px; color: #a8c6af; font-size: 10px; font-weight: 600; line-height: 1.25; }
-.exercise-card-camera svg { color: #83dba4; }
-.exercise-card-check {
-  display: grid;
-  width: 22px;
-  height: 22px;
-  place-items: center;
-  color: transparent;
-  border: 1px solid rgba(209, 236, 214, 0.25);
-  border-radius: 50%;
-  transition: color 180ms ease, background 180ms ease, border-color 180ms ease;
+.exercise-badge-mode { flex: 0 0 auto; white-space: nowrap; }
+.exercise-badge-muscle { color: #c9d4cc; background: rgba(180, 205, 188, 0.08); }
+.exercise-card-camera {
+  color: #a9e9c4;
+  border-color: rgba(16, 185, 129, 0.24);
+  background: rgba(16, 185, 129, 0.1);
 }
-.exercise-card-check svg { width: 15px; height: 15px; }
-.exercise-card[aria-checked="true"] .exercise-card-check { color: #102d1b; border-color: #00e676; background: #00e676; }
 
 .exercise-sheet-footer {
   display: flex;
@@ -1851,28 +1768,21 @@ button {
   align-items: center;
   gap: 16px;
   padding: 16px 26px 20px;
-  border-top: 1px solid rgba(207, 237, 213, 0.1);
-  background: rgba(17, 24, 19, 0.92);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
+  border-top: 1px solid #2b332e;
+  background: #121512;
 }
 .exercise-sheet-selection { display: flex; flex: 1 1 auto; flex-direction: column; gap: 5px; min-width: 0; }
-.exercise-sheet-selection small { color: #7e9d87; font-size: 9px; font-weight: 800; letter-spacing: 0.12em; }
+.exercise-sheet-selection small { color: #94aa9a; font-size: 9px; font-weight: 700; letter-spacing: 0.12em; }
 .exercise-sheet-selection strong { overflow: hidden; color: #e4f3e7; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .exercise-sheet-done {
-  display: flex;
   flex: 0 0 auto;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  min-width: 150px;
+  min-width: 140px;
   min-height: 48px;
   padding: 12px 16px;
   color: #132218;
   border: 0;
   border-radius: 12px;
   background: #c9f58f;
-  box-shadow: 0 5px 22px rgba(170, 238, 123, 0.12);
   font-size: 14px;
   font-weight: 800;
   cursor: pointer;
@@ -1881,7 +1791,6 @@ button {
 }
 .exercise-sheet-done:hover { background: #ddffad; }
 .exercise-sheet-done:active { transform: scale(0.98); }
-.exercise-sheet-done > span:last-child { font-size: 19px; line-height: 1; }
 
 @media (max-width: 600px) and (orientation: portrait) {
   .exercise-sheet {
@@ -1892,22 +1801,21 @@ button {
     height: min(760px, calc(100dvh - 16px));
     border-radius: 24px 24px 0 0;
   }
-  .exercise-sheet-handle { display: grid; flex: 0 0 17px; place-items: center; }
-  .exercise-sheet-handle span { width: 38px; height: 4px; border-radius: 5px; background: #526b59; }
-  .exercise-sheet-header { padding: 7px 20px 0; }
+  .exercise-sheet-header { padding: 20px 20px 0; }
   .exercise-list { padding-right: 20px; padding-left: 20px; }
   .exercise-sheet-footer { padding: 13px 20px calc(14px + env(safe-area-inset-bottom, 0px)); }
 }
 
 @media (max-width: 360px) {
-  .exercise-card { grid-template-columns: 64px minmax(0, 1fr) 22px; gap: 10px; min-height: 88px; }
-  .exercise-card-visual { width: 64px; height: 64px; }
-  .exercise-card-name { font-size: 14px; }
+  .exercise-list { padding-right: 16px; padding-left: 16px; }
+  .exercise-card { gap: 10px; padding: 12px; }
+  .exercise-card-heading { gap: 8px; }
+  .exercise-card-name { font-size: 15px; }
   .exercise-sheet-done { min-width: 120px; }
 }
 
 @media (max-height: 500px) {
-  .exercise-sheet-header { padding-top: 12px; }
+  .exercise-sheet-header { padding-top: 10px; }
   .exercise-sheet-titleline { margin-top: 5px; }
   .exercise-sheet-titleline h2 { font-size: 24px; }
   .exercise-sheet-header > p { margin-top: 5px; }
@@ -1916,13 +1824,18 @@ button {
   .exercise-sheet-done { min-height: 42px; padding-top: 8px; padding-bottom: 8px; }
 }
 
-/* На низком экране целая карточка помещается между шапкой и нижним действием. */
 @media (max-height: 500px) and (orientation: landscape) {
-  .exercise-card { grid-template-columns: 56px minmax(0, 1fr) 22px; gap: 10px; min-height: 72px; padding: 7px; }
-  .exercise-card-visual { width: 56px; height: 56px; }
-  .exercise-card-copy { gap: 5px; }
-  .exercise-card-name { font-size: 14px; }
-  .exercise-badge { padding: 3px 6px; }
+  /* Оставляем больше места списку, сохраняя описание для скринридеров. */
+  .exercise-sheet-header > p {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .exercise-card { gap: 8px; min-height: 80px; padding: 10px 13px; }
+  .exercise-card-name { font-size: 15px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2306,9 +2219,7 @@ button {
     margin-bottom: 5px;
   }
 
-  .exercise-select { min-height: 46px; padding: 5px 8px 5px 5px; }
-
-  .exercise-select-visual { width: 36px; height: 36px; }
+  .exercise-select { min-height: 46px; padding: 7px 10px; }
 
   .setup-intro .exercise-hint {
     margin-top: 5px;
@@ -2362,8 +2273,6 @@ button {
 
   .exercise-select { min-height: 40px; padding-top: 4px; padding-bottom: 4px; }
 
-  .exercise-select-visual { width: 32px; height: 32px; }
-
   .setup-intro .exercise-hint {
     margin-top: 5px;
     font-size: 10px;
@@ -2411,8 +2320,6 @@ button {
   }
 
   .exercise-select { min-height: 40px; }
-
-  .exercise-select-visual { width: 32px; height: 32px; }
 
   .setup-choices {
     gap: 6px;
